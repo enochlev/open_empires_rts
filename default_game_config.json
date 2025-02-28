@@ -1,0 +1,446 @@
+{
+    "Buildings": {
+        "Castle": {
+            "description": "A place to incrase your number of buildings by 5",
+            "cost": {
+                "money": 1000,
+                "hay": 10,
+                "wood": 10
+            },
+            "hourly_cost": {
+                "money": 50
+                },
+            "max_level": 6,
+            "hours_to_build": 4,
+            "starting_level": 1
+        },
+
+
+        "Village House": {
+            "description": "A house for 5 villagers to live in.",
+            "cost": {
+                "money": 1000,
+                "stone": 5
+            },
+            "hourly_cost": {
+                "money": 20
+            },
+            "max_level": 10,
+            "hours_to_build": 3,
+            "starting_level": 1
+        },
+        "Market": {
+            "description": "A market to trade resources. Upgrading provides better and more trades per day",
+            "cost": {
+                "money": 2000,
+                "stone": 5,
+                "wood": 30
+            },
+            "hourly_cost": {
+                "money": 20
+            },
+            "max_level": 3,
+            "hours_to_build": 6,
+            "starting_level": 0
+        },
+        
+        "Smithy": {
+            "description": "Boosts all training by 1.2x and upgrade units",
+            "cost": {
+                "money": 10000,
+                "diamond": 2,
+                "iron": 20,
+                "stone": 50
+            },
+            "hourly_cost": {
+                "money": 50
+            },
+            "max_level": 1,
+            "hours_to_build": 24,
+            "starting_level": 0
+        },
+        "Church": {
+            "description": "Boosts all resource resource production by 1.25x",
+            "cost": {
+                "money": 10000,
+                "diamond": 2,
+                "gold": 6,
+                "stone": 50
+            },
+            "hourly_cost": {
+                "money": 50
+            },
+            "max_level": 1,
+            "hours_to_build": 24,
+            "starting_level": 0
+        },
+        "Colosseum": {
+            "description": "Boosts all attack by 1.2x",
+            "cost": {
+                "money": 10000,
+                "diamond": 2,
+                "iron": 20,
+                "stone": 50
+            },
+            "hourly_cost": {
+                "money": 50
+            },
+            "max_level": 1,
+            "hours_to_build": 24,
+            "starting_level": 0
+        },
+
+        "Farm": {
+            "description": "Produces hay.",
+            "cost": {
+                "money": 1000,
+                "wood": 20
+            },
+            "hourly_cost": {
+                "money": 20
+            },
+            "max_level": 3,
+            "hours_to_build": 6,
+            "starting_level": 1
+        },
+        
+        "Lumber Mill": {
+            "description": "Produces wood.",
+            "cost": {
+                "money": 1000,
+                "stone": 15,
+                "hay": 20
+            },
+            "hourly_cost": {
+                "money": 20
+            },  
+            "max_level": 3,
+            "hours_to_build": 6,
+            "starting_level": 1
+        },
+        
+        "Quarry": {
+            "description": "Produces stone.",
+            "cost": {
+                "money": 1000,
+                "wood": 20,
+                "hay": 20
+            },
+            "hourly_cost": {
+                "money": 20
+            },
+            "max_level": 3,
+            "hours_to_build": 6,
+            "starting_level": 0
+        },
+        
+        "Mines": {
+            "description": "Produces iron.",
+            "cost": {
+                "money": 1000,
+                "stone": 20,
+                "wood": 25
+            },
+            "hourly_cost": {
+                "money": 20
+            },
+            "max_level": 3,
+            "hours_to_build": 6,
+            "starting_level": 0
+        },
+        "Barracks": {
+            "description": "Trains soldiers.",
+            "cost": {
+                "money": 2000,
+                "hay": 20,
+                "wood": 25,
+                "iron": 10
+            },
+            "hourly_cost": {
+                "money": 20
+            },
+            "max_level": 3,
+            "hours_to_build": 6,
+            "starting_level": 0
+        },
+        "Stables": {
+            "description": "Trains calvary.",
+            "cost": {
+                "money": 2000,
+                "hay": 20,
+                "iron": 100
+            },
+            "hourly_cost": {
+                "money": 20
+            },
+            "max_level": 3,
+            "hours_to_build": 12,
+            "starting_level": 0
+        },
+        
+        "Dock": {
+            "description": "A dock to construct boats.",
+            "cost": {
+                "money": 2500,
+                "stone": 5,
+                "wood": 30
+            },
+            "hourly_cost": {
+                "money": 20
+            },
+            "max_level": 3,
+            "hours_to_build": 6,
+            "starting_level": 0
+        },
+        "Keep": {
+            "description": "Produces Dukes. Used for conquering other villages.",
+            "cost": {
+                "money": 30000,
+                "diamond": 2,
+                "gold": 20,
+                "stone": 50
+            },
+            "hourly_cost": {
+                "money": 200
+            },
+            "max_level": 1,
+            "hours_to_build": 48,
+            "starting_level": 0
+        },
+        
+        "Walls": {
+            "description": "Protects your village from enemies by 5% per level",
+            "cost": {
+                "money": 500,
+                "stone": 10
+            },
+            "hourly_cost": {
+                "money": 20
+            },
+            "max_level": 10,
+            "hours_to_build": 1,
+            "starting_level": 0
+        }
+    },
+    "Units": {
+        "Citizen": {
+            "description": "A citizen to work in your village or turn into a soldier",
+            "cost": {
+                "money": 100,
+                "hay": 4
+            },
+            "hourly_cost": {
+                "money": 10
+            },
+            "max": 1,
+            "hours_to_build": 0.5,
+            "attack": 5,
+            "defense": 8,
+            "archer_defense": 8,
+            "calvary_defense": 5,
+            "building_source": "Castle",
+            "upgrade_cost": {},
+            "starting_level": 1,
+            "max_level": 1,
+            "start_amount": 3
+    
+        },
+        "Soldier": {
+            "description": "A soldier to defend your village",
+            "cost": {
+                "money": 200,
+                "hay": 20
+            },
+            "hourly_cost": {
+                "money": 30
+            },
+            "hours_to_build": 1,
+            "attack": 10,
+            "defense": 10,
+            "archer_defense": 10,
+            "calvary_defense": 10,
+            "building_source": "Barracks",
+            "upgrade_cost": {
+                "money": 1000,
+                "hay": 50,
+                "iron": 100,
+                "gold": 5
+            },
+            "starting_level": 1,
+            "max_level": 3,
+            "start_amount": 0
+        },
+        "Calvary": {
+            "description": "A calvary to defend your village",
+            "cost": {
+                "money": 300,
+                "hay": 10,
+                "iron": 50
+            },
+            "hourly_cost": {
+                "money": 50
+            },
+            "hours_to_build": 1.5,
+            "attack": 15,
+            "defense": 10,
+            "archer_defense": 10,
+            "calvary_defense": 10,
+            "building_source": "Stables",  
+            "upgrade_cost": {
+                "money": 1500,
+                "hay": 25,
+                "iron": 200,
+                "gold": 8
+            },
+            "starting_level": 0,
+            "max_level": 3,
+            "start_amount": 0
+        },
+        "Archer": {
+            "description": "An archer to defend your village",
+            "cost": {
+                "money": 250,
+                "hay": 4,
+                "wood": 50
+            },
+            "hourly_cost": {
+                "money": 50
+            },
+            "hours_to_build": 2,
+            "attack": 10,
+            "defense": 15,
+            "archer_defense": 10,
+            "calvary_defense": 10,
+            "building_source": "Barracks",
+            "upgrade_cost": {
+                "money": 1000,
+                "hay": 25,
+                "wood": 100,
+                "gold": 5
+            },
+            "starting_level": 0,
+            "max_level": 3,
+            "start_amount": 0
+        },
+        "Duke": {
+            "description": "A duke to conquer other villages.",
+            "cost": {
+                "money": 10000,
+                "hay": 20,
+                "iron": 20,
+                "gold": 20,
+                "diamond": 2
+            },
+            "hourly_cost": {
+                "money": 200
+            },
+            "max": 1,
+            "hours_to_build": 24,
+            "attack": 30,
+            "defense": 30,
+            "archer_defense": 30,
+            "calvary_defense": 30,
+            "building_source": "Keep",
+            "upgrade_cost": {},
+            "starting_level": 0,
+            "max_level": 1,
+            "start_amount": 0
+        },
+        "Boat": {
+            "description": "A boat used to cary resources and soldiers to other lands.",
+            "cost": {
+                "money": 1000,
+                "wood": 100
+            },
+            "hourly_cost": {
+                "money": 100
+            },
+            "max": 3,
+            "hours_to_build": 6,
+            "attack": 0,
+            "defense": 0,
+            "archer_defense": 0,
+            "calvary_defense": 0,
+            "building_source": "Dock",
+            "upgrade_cost": {
+                "money": 1000,
+                "wood": 100
+            },
+            "starting_level": 0,
+            "max_level": 3,
+            "start_amount": 0
+        }
+    },
+    "Resources":{
+        "money": {
+            "description": "The currency of the game.",
+            "boost_multiplier": 1,
+            "max": 100000,
+            "default": 1000
+        },
+        "hay": {
+            "description": "A resource used to feed your villagers and soldiers.",
+            "boost_multiplier": 1,
+            "max": 1000,
+            "default": 100
+        },
+        "wood": {
+            "description": "A resource used to build buildings and boats.",
+            "boost_multiplier": 1,
+            "max": 1000,
+            "default": 100
+        },
+        "stone": {
+            "description": "A resource used to build buildings and walls.",
+            "boost_multiplier": 1,
+            "max": 1000,
+            "default": 100
+        },
+        "iron": {
+            "description": "A resource used to build buildings and soldiers.",
+            "boost_multiplier": 1,
+            "max": 1000,
+            "default": 100
+        },
+        "gold": {
+            "description": "A resource used to build buildings and soldiers.",
+            "boost_multiplier": 1,
+            "max": 1000,
+            "default": 100
+        },
+        "diamond": {
+            "description": "A resource used to build buildings and soldiers.",
+            "boost_multiplier": 1,
+            "max": 1000,
+            "default": 100
+        }
+    },
+    "Quests": 
+    [
+        {"text": "Collect 5 diamonds", "reward": "resource.money = 1000", "func": "resource.diamond >= 5"},
+        {"text": "Gather 50 hay", "reward": "resource.money = 500", "func": "resource.hay >= 50"},
+        {"text": "Amass 100 iron", "reward": "resource.money = 500", "func": "resource.iron >= 100"},
+        {"text": "Accumulate 25 gold", "reward": "resource.money = 500", "func": "resource.gold >= 25"},
+        {"text": "Stockpile 100 stone", "reward": "resource.money = 250", "func": "resource.stone >= 100"},
+        {"text": "Train 10 soldiers", "reward": "resource.money = 300", "func": "unit.Soldier >= 10"},
+        {"text": "Have 8 buildings", "reward": "resource.money = 400", "func": "building.Castle >= 8"},
+        {"text": "Have 15 buildings", "reward": "resource.money = 800", "func": "building.Castle >= 15"},
+        {"text": "Harvest 100 wood", "reward": "resource.money = 200", "func": "resource.wood >= 100"},
+        {"text": "Forge 2 boats", "reward": "resource.money = 600", "func": "unit.Boat >= 2"},
+        {"text": "Conscript 5 cavalry", "reward": "resource.money = 350", "func": "unit.Calvary >= 5"},
+        {"text": "Construct a grand church", "reward": "resource.money = 800", "func": "building.Church >= 1"}
+    ],
+
+    "game_speed_and_multiplier":
+    {
+        "global_speed": 1,
+        "building_speed": 1, 
+        "unit_speed": 1,
+        "resource_speed": 1,
+        "research_speed": 1,
+        "unit_upgrade_cost_multiplier": 2.2,
+        "unit_upgrade_boost_multiplier": 1.2,
+        "building_upgrade_cost_multiplier": 2.2,
+        "building_upgrade_boost_multiplier": 1.2
+    }
+}
