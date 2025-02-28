@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-image: url('{{ url_for('static', filename='backgroundImage.png') }}');
+            background-size: 100% auto; /* Cover the width of the screen */
+            background-repeat: no-repeat; /* No repeat for the background image */
+            background-attachment: fixed; /* Keep the background fixed during scrolling */
+            background-color: #99d9ea; /* Set the background color */
+            color: #001;
+        }
+        .slider {
+            width: 200pt; /* Set the slider width */
+            margin: 0; /* Remove default margin */
+        }
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            width: 200pt; /* Match the width with the slider */
+            padding: 0;
+        }
+        #game-container {
+            position: relative;
+            width: 1000px;
+            height: 1000px;
+            background-size: cover;
+        }
+        .building {
+            position: absolute;
+        }
+        </style>
+</head>
+<body>
+    <h1>Welcome to the Game</h1>
+    <form method="POST">
+        <label for="player_name">Enter your name:</label>
+        <input type="text" name="player_name" required>
+        <button type="submit">Start Game</button>
+    </form>
+
+    <h2>Existing Players</h2>
+    <div>
+        {% for player_name in current_players %}
+            <form method="POST">
+                <input type="hidden" name="player_name" value="{{ player_name }}">
+                <button type="submit">{{ player_name }}</button>
+            </form>
+        {% endfor %}
+    </div>
+
+    <h2>The current world speed is: {{ current_speed }}</h2>
+    <form method="POST">
+        <input type="range" class="slider" name="speed" min="1" max="9" value="{{ current_speed }}" step="1" list="tickmarks">
+        <datalist id="tickmarks">
+            <option value="1"></option>
+            <option value="2"></option>
+            <option value="3"></option>
+            <option value="4"></option>
+            <option value="5"></option>
+            <option value="7"></option>
+            <option value="8"></option>
+            <option value="9"></option>
+            
+        </datalist>
+        <div class="slider-labels">
+            <span>1</span>
+            <span>2</span>
+            <span>3</span>
+            <span>4</span>
+            <span>5</span>
+            <span>7</span>
+            <span>8</span>
+            <span>9</span>
+
+        </div>
+        <button type="submit">Set Speed</button>
+    </form>
+
+    
+    
+    #game-container {
+        position: relative;
+        width: 1000px;
+        height: 1000px;
+        background-size: cover;
+    }
+    .building {
+        position: absolute;
+    }
+
+    
+    <!-- <div id="game-container" style="background-image: url('{{ url_for('static', filename=render.main_image) }}');">
+        {% for building in render.buildings %}
+            <img class="building" src="{{ url_for('static', filename=building.path) }}" 
+                 style="left: {{ building.x }}px; top: {{ building.y }}px; transform: scale({{ building.scale }});">
+        {% endfor %}
+    </div> -->
+
+
+</body>
+</html>

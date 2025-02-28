@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-image: url('{{ url_for('static', filename='backgroundImage.png') }}');
+            background-size: cover;
+            background-repeat: no-repeat; /* Prevent the image from repeating */
+            color: #001;
+
+        }
+        /* Add some basic styling */
+        form { margin-bottom: 20px; }
+        input, button { margin-right: 10px; }
+        .progress-container {
+            width: 300pt; 
+            background-color: #ddd; 
+        }
+        .progress-bar {
+            height: 20px; 
+            background-color: #4CAF50; 
+            text-align: center; 
+            line-height: 20px; 
+            color: white; 
+        }
+        .quest-box {
+            border: 1px solid;
+            margin: 5px;
+            padding: 5px;
+            width: 300pt;
+        }
+        .quest-completed {
+            background-color: green;
+        }
+        .quest-not-completed {
+            background-color: white;
+        }
+    </style>
+    <!-- <meta http-equiv="refresh" content="30"> -->
+
+</head>
+<body>
+    <a href="{{ url_for('index') }}" style="display: inline-block; padding: 10px 20px; margin: 10px; background-color: #f0f0f0; color: black; border: 1px solid #ddd; text-decoration: none; border-radius: 4px;">Back to Home</a>
+
+    <h1>🎮 Dashboard for {{ player.Name }}</h1>
+
+    <h2>💰 Money</h2>
+    <p>Amount: {{ "%.0f"|format(player.Resources.money) }}</p>
+    <!-- <form method="POST">
+        <input type="number" name="amount" placeholder="AddMoney">
+        <input type="password" name="password" placeholder="Password">
+        <button name="add_money" type="submit">Update Money</button>
+    </form> -->
+    <h2>🏢 Buildings</h2>
+    <ul>
+        {% for building, count in player.buildings.items() %}
+            <li>{{ building }}: {{ count }}</li>
+        {% endfor %}
+    </ul>
+
+
+    <form method="POST">
+        <select name="building_type">
+            <option value="Village House">Village House - $500, 30 Stone</option>
+            <option value="Dock">Dock - $1000, 5 Wood, 4 Stone</option>
+            <option value="Walls">Walls - $200, 50 Stone</option>
+            <option value="Church">Church - $2000, 50 Stone, 10 Wood</option>
+            <option value="Farm">Farm - $100, 20 Wood</option>
+            <option value="Boat">Boat - $1000, 30 Wood</option>
+        </select>
+        <button name="add_building" type="submit">Add Building</button>
+    </form>
+    <!-- Form to add/remove money -->
+
+
+    <h2>👥 Citizens</h2>
+    <p>Citizens: {{ player.citizens }}</p>
+    <!-- Form to manage citizens -->
+    <form method="POST">
+        <label>Add Citizens</label>
+        <button name="add_citizen" type="submit">Add Citizen</button>
+        <button name="remove_citizen" type="submit">Remove Citizen</button>
+    </form>
+
+    <h2>🏰 Barracks</h2>
+    <p>Soldiers: {{ player.soldiers }}</p>
+    <p>Calvary: {{ player.calvary }}</p>
+    <p>Training Soldiers: {{ player.training_soliders }}</p>
+    <p>Training Calvary: {{ player.training_calvary }}</p>
+    <div class="progress-container">
+        <div class="progress-bar" style="width:{{ player.training_progress * 100 }}%">{{ "%.2f"|format(player.training_progress * 100) }}%</div>
+    </div>
+    <!-- Form to manage stone miners -->
+    <form method="POST">
+        <label>Add Soldiers</label>
+        <button name="add_training_soliders" type="submit">Add Soldier Training</button>
+        <button name="remove_training_soliders" type="submit">Remove Soldier Training</button>
+    </form>
+
+    <div class="progress-container">
+        <div class="progress-bar" style="width:{{ player.training_calvary_progress * 100 }}%">{{ "%.2f"|format(player.training_calvary_progress * 100) }}%</div>
+    </div>
+    <form method="POST">
+        <label>Add Soldiers</label>
+        <button name="add_training_calvary" type="submit">Add Calvary Training</button>
+        <button name="remove_training_calvary" type="submit">Remove Calvary Training</button>
+    </form>
+
+    <h2>⛏️ Quarry</h2>
+    <p>Stone: {{ player.stone }}</p>
+    <!-- Form to manage stone miners -->
+    <div class="progress-container">
+        <div class="progress-bar" style="width:{{ player.stone_progress * 100 }}%">{{ "%.2f"|format(player.stone_progress * 100) }}%</div>
+    </div>
+
+    <form method="POST">
+        <label>Stone Miners: {{ player.stone_miners }}</label>
+        <button name="add_stone_miner" type="submit">Add Miner</button>
+        <button name="remove_stone_miner" type="submit">Remove Miner</button>
+    </form>
+
+    <h2>🪵 Lumber</h2>
+    <p>Lumber: {{ player.wood }}</p>
+    <!-- Form to manage stone miners -->
+    <div class="progress-container">
+        <div class="progress-bar" style="width:{{ player.lumber_progress * 100 }}%">{{ "%.2f"|format(player.lumber_progress * 100) }}%</div>
+    </div>
+
+    <form method="POST">
+        <label>Lumber Workers: {{ player.lumber_workers }}</label>
+        <button name="add_lumber_worker" type="submit">Add Lumber Worker</button>
+        <button name="remove_lumber_worker" type="submit">Remove Lumber Worker</button>
+    </form>
+
+    <h2>🏔️ Mines</h2>
+
+    <p>Iron: {{ player.iron }}</p>
+    <p>Gold: {{ player.gold }}</p>
+    <p>Diamonds: {{ player.diamonds }}</p>
+
+    <div class="progress-container">
+        <div class="progress-bar" style="width:{{ player.miner_progress * 100 }}%">{{ "%.2f"|format(player.miner_progress * 100) }}%</div>
+    </div>
+        <!-- Form to manage iron miners -->
+        <form method="POST">
+            <label>Iron Miners: {{ player.iron_miners }}</label>
+            <button name="add_iron_miner" type="submit">Add Miner</button>
+            <button name="remove_iron_miner" type="submit">Remove Miner</button>
+        </form>
+
+
+
+
+
+
+
+    <h2>🚜 Farm</h2>
+    <p>Hay: {{ player.hay }}</p>
+    
+    <!-- Form to manage farms -->
+    <form method="POST">
+        <label>Farms:</label>
+        {% for farm in player.farms %}
+            <div class="farm-container">
+                <label>Farm {{ loop.index }}: Active: {{ farm.active }}</label>
+                <div class="progress-container">
+                    <div class="progress-bar" style="width:{{ farm.progress * 100 }}%">{{ "%.2f"|format(farm.progress * 100) }}%</div>
+                </div>
+                <button name="toggle_farm" value="{{ loop.index0 }}" type="submit">{{ 'Deactivate' if farm.active else 'Activate' }} Farm</button>
+            </div>
+        {% endfor %}
+        <button name="add_farm" type="submit">Add Farm</button>
+    </form>
+
+    <h2>🔄 Trade with Bank</h2>
+    <div>
+        <form method="POST">
+            <label>Trade 1 Iron for 80 Money</label>
+            <button name="trade_iron_for_money" type="submit">Trade Iron</button>
+        </form>
+        <form method="POST">
+            <label>Trade 1 Gold for 200 Money</label>
+            <button name="trade_gold_for_money" type="submit">Trade Gold</button>
+        </form>
+        <form method="POST">
+            <label>Trade 1 Diamond for 1000 Money</label>
+            <button name="trade_diamond_for_money" type="submit">Trade Diamond</button>
+        </form>
+        <form method="POST">
+            <label>Trade 1 hay for 50 Money</label>
+            <button name="trade_hay_for_money" type="submit">Trade Hay</button>
+        </form>
+        <form method="POST">
+            <label>Send/Gift Resources</label>
+            <select name="recipient_player">
+                {% for other_player in current_players if other_player != player.name %}
+                    <option value="{{ other_player }}">{{ other_player }}</option>
+                {% endfor %}
+            </select>
+            <input type="number" name="resource_amount" placeholder="Amount">
+            <select name="resource_type">
+                <option value="money">Money</option>
+                <option value="stone">Stone</option>
+                <option value="iron">Iron</option>
+                <option value="gold">Gold</option>
+                <option value="diamond">Diamond</option>
+                <option value="wood">Wood</option>
+                <option value="hay">Hay</option>
+            </select>
+            <button name="send_resources" type="submit">Send</button>
+        </form>
+    </div>
+
+
+        <h2>📜 Quests</h2>
+        <div>
+            <h2>Quests</h2>
+            {% for quest in quests %}
+                <div style="border: 1px solid; margin: 5px; padding: 5px; width: 400pt; background-color: {{ 'green' if quest.completed else 'white' }}">
+                    <p>{{ quest.text }}</p>
+                    <p>Reward: {{ quest.reward }}</p>
+                </div>
+            {% endfor %}
+        </div>
+
+
+
+
+    <!-- Add forms for other actions as needed -->
+
+</body>
+</html>
