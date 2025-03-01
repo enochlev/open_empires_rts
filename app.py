@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, Blueprint
 #from player import Player, quests, global_trades,game_config
-from app.db_utils import game_config, GameAPI
+from app.db_utils import game_config, GameAPI, PlayerAPI
 import os
 import json
 SPEED = 3.5
@@ -113,6 +113,7 @@ def index():
             session['current_player'] = player_name
             session['current_player_id'] = player_id
             session['session_oath'] = session_oath
+            game_api.update_progress(player_id)
             return redirect(url_for('empire_game.dashboard'))
 
 
@@ -142,11 +143,12 @@ def dashboard():
         return redirect(url_for('empire_game.index'))
 
 
-    player = session.get('current_player')
-    game_api.update_progress(player_id)
+    player_api = PlayerAPI(player_id) 
 
 
-    get_player_data = game_api.get_player_data(player_name)
+    get_player_data = player_api.load_player_stats()
+
+
 
     updated_quests = []
     #enumrate to get index and quest

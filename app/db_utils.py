@@ -12,71 +12,167 @@ with open("default_game_config.json") as f:
 class PlayerAPI:
     def __init__(self, player_id):
         self.player_id = player_id
-        # Here we assume that you already have a loaded dictionary of player_stats.
-        # For example, you might load it from the DB when the player logs in.
-        self.player_stats = self.load_player_stats()
-        # Also open a connection to the DB
         self.db = sqlite3.connect(DB_NAME)
         self.db.row_factory = sqlite3.Row
 
 
     def load_player_stats(self):
-        stats = {}
+        """
+         {
+            "Buildings": {
+                "levels": {"Castle": 1, "Village House": 1, "Church": 1, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 1},
+                "assigned_workers": {"Castle": 0, "Village House": 0, "Church": 0, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 0},
+                "ongoing_builds": {"building": "Castle","progress":0.4344, "number_of_workers":3, "level":2},
+                "queued_builds": [{"building": "Castle","level":3}, {"building": "Castle","level":4}],
+            },
+            "Units": {
+                "levels": {"Village House.Citizen": 1, "Barracks.Soldier": 1, "Stables.Calvary": 1, "Barracks.Archer": 1},
+                "count": {"Village House.Citizen": 10, "Barracks.Soldier": 0, "Stables.Calvary": 0, "Barracks.Archer": 0},
+                "ongoing_recruitments": [{"unit": "Barracks.Soldier", "progress": 0.5}, {"unit": "Stables.Calvery", "progress": 0.2}],
+                "queued_recruitments": [{"unit": "Barracks.Soldier"}, {"unit": "Barracks.Soldier"}, {"unit": "Stables.Calvary"}],
+                "ongoing_upgrades": {"unit": "Barracks.Soldier", "progress": 0.3, "level": 1},
+                "queued_upgrades": [{"unit": "Barracks.Soldier", "level": 2}, {"unit": "Stables.Calvary", "level": 1}],
+            },
+            "Resources": {
+                "money": 1000,
+                "stone": 100,
+                "iron": 50,
+                "wood": 100,
+                "hay": 0,
+                "gold": 0,
+                "diamond": 0
+            },
+            "Quests": [
+                {"id": 1, "description": "Build a Castle", "reward": {"money": 100, "stone": 50}, "completed": False},
+                {"id": 2, "description": "Recruit 10 Soldiers", "reward": {"money": 50, "stone": 20}, "completed": False}
+            ],
+            "Trades":
+            [
+                {"id": 1, "resources_cost": {"money": 100, "stone": 50}, "resources_earned": {"wood": 100, "iron": 50}, "source_player": "Marcus1233"},
+                ...#make sure to check all players
+            ]
+    
+
+        }
+
+                    CREATE TABLE IF NOT EXISTS production_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_id INTEGER,
+                production_type TEXT,      -- 'contruction' or 'unit' or 'resource' or 'research'
+                entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks.Soldier' or 'Stables.Calvery') or resource (e.g., 'hay')
+                number_of_workers INTEGER, -- number of workers assigned to the task
+                start_time TIMESTAMP DEFAULT (datetime('now')),
+                duration REAL,             -- expected duration (in seconds, or hours) needed to complete
+                progress REAL DEFAULT 0,     -- a float tracking current progress between 0 and 1
+                status TEXT DEFAULT 'in_progress',  -- could be in_progress, or queued
+                FOREIGN KEY(player_id) REFERENCES players(player_id)
+        """
+        cur = self.db.cursor()
+        player_buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (self.player_id,)).fetchall()
+        player_buildings = {row["building_type"]: row["level"] for row in player_buildings}
+        
+        player_units = cur.execute("SELECT * FROM units WHERE player_id = ?", (self.player_id,)).fetchall()
+        player_units = {row["unit_type"]: {"count": row["count"], "level": row["level"]} for row in player_units}
+        
+        #get the first row but in dict form
+        player_resources = dict(cur.execute("SELECT * FROM resources WHERE player_id = ?", (self.player_id,)).fetchone())
+        player_resources = {k: v for k, v in player_resources.items() if k in list(game_config["Resources"].keys())}
+
+        player_queues = cur.execute("SELECT * FROM production_queue WHERE player_id = ?", (self.player_id,)).fetchall()
+        player_queues = [dict(row) for row in player_queues]
+
+        player_quests = cur.execute("SELECT * FROM quests WHERE player_id = ?", (self.player_id,)).fetchall()
+        player_quests = [dict(row) for row in player_quests]
+
+        player_trades = cur.execute("SELECT * FROM trade_offers").fetchall()
+        player_trades = [dict(row) for row in player_trades]
 
         # ----------------------
         # Initialize Buildings
+        stats = {}
         stats["Buildings"] = {}
         stats["Buildings"]["levels"] = {}
         stats["Buildings"]["assigned_workers"] = {}
         stats["Buildings"]["ongoing_builds"] = {}
-        stats["Buildings"]["queued_builds"] = {}
+        stats["Buildings"]["queued_builds"] = []
         for building, conf in game_config["Buildings"].items():
-            default_level = conf.get("default_level", 0)
-            # Ensure there is at least a level 1 Castle:
-            if building == "Castle" and default_level == 0:
-                default_level = 1
-            stats["Buildings"]["levels"][building] = default_level
 
-            # For worker-assigned buildings we could default to zero.
-            stats["Buildings"]["assigned_workers"][building] = 0
+            stats["Buildings"]["levels"][building] = player_buildings.get(building, 0)
+            building_level = stats["Buildings"]["levels"][building]
 
-            # No build in progress initially.
-            stats["Buildings"]["ongoing_builds"][building] = None
+            #search if there are assinged workers for resource collection
+            for queue in player_queues:
+                if queue["production_type"] == "resource" and queue["entity"] == building:
+                    stats["Buildings"]["assigned_workers"][building] = queue["number_of_workers"]
+                    break
+            
+            #search if there are ongoing builds
+            for queue in player_queues:
+                if queue["production_type"] == "construction" and queue["entity"] == building:
+                    stats["Buildings"]["ongoing_builds"] = {"building": building, "progress": queue["progress"], "number_of_workers": queue["number_of_workers"], "level": building_level + 1}
+                    building_level += 1
+                    break
+            
+            #search if there are queued builds
+            for queue in player_queues:
+                if queue["production_type"] == "construction" and queue["entity"] == building:
+                    stats["Buildings"]["queued_builds"] += [{"building": building, "level": building_level + 1, "order": queue['id']}]
+                    building_level += 1
 
-            # Queued tasks start with zero.
-            stats["Buildings"]["queued_builds"][building] = 0
+        #sort queued_builds by order then remove it
+        stats["Buildings"]["queued_builds"] = sorted(stats["Buildings"]["queued_builds"], key=lambda x: x["order"])
+        stats["Buildings"]["queued_builds"] = [x.pop('order') for x in stats["Buildings"]["queued_builds"]]
+
 
         # ----------------------
         # Initialize Units
         stats["Units"] = {}
         stats["Units"]["levels"] = {}
         stats["Units"]["count"] = {}
-        stats["Units"]["ongoing_builds"] = {}
-        stats["Units"]["queued_builds"] = {}
+        stats["Units"]["ongoing_recruitments"] = []
+        stats["Units"]["queued_recruitments"] = []
         stats["Units"]["ongoing_upgrades"] = {}
-        stats["Units"]["queued_upgrades"] = {}
+        stats["Units"]["queued_upgrades"] = []
         for unit, conf in game_config["Units"].items():
-            default_level = conf.get("default_level", 0)
-            if unit == "Citizen" and default_level == 0:
-                default_level = 1
-            stats["Units"]["levels"][unit] = default_level
+            
+            #levels
+            stats["Units"]["levels"][unit] = player_units.get(unit, {"count": 0, "level": 0})["level"]
+            #count
+            stats["Units"]["count"][unit] = player_units.get(unit, {"count": 0, "level": 0})["count"]
 
-            default_count = conf.get("default_count", 0)
-            if unit == "Citizen" and default_count == 0:
-                default_count = 10
-            stats["Units"]["count"][unit] = default_count
+            #search if there are ongoing builds
+            for queue in player_queues:
+                if queue["production_type"] == "unit" and queue["entity"] == unit:
+                    stats["Units"]["ongoing_recruitments"] += [{"unit": unit, "progress": queue["progress"]}]
+                    break
+            
+            #search if there are queued recruitments
+            for queue in player_queues:
+                if queue["production_type"] == "unit" and queue["entity"] == unit:
+                    stats["Units"]["queued_recruitments"] += [{"unit": unit, "order": queue['id']}]
+                    #do not break because we want a list
+                
+            #search if there are ongoing upgrades
+            for queue in player_queues:
+                if queue["production_type"] == "unit_research" and queue["entity"] == unit:
+                    stats["Units"]["ongoing_upgrades"] = {"unit": unit, "progress": queue["progress"], "level": stats["Units"]["levels"][unit] + 1}
+                    break
+            #search if there are queued upgrades
+            for queue in player_queues:
+                if queue["production_type"] == "unit_research" and queue["entity"] == unit:
+                    stats["Units"]["queued_upgrades"] += [{"unit": unit, "level": stats["Units"]["levels"][unit] + 1, "order": queue['id']}]
+                    #do not break because we want a list
 
-            # No unit production or upgrade in progress at player creation.
-            stats["Units"]["ongoing_builds"][unit] = None
-            stats["Units"]["queued_builds"][unit] = 0
-            stats["Units"]["ongoing_upgrades"][unit] = None
-            stats["Units"]["queued_upgrades"][unit] = 0
+        #sort queued_recruitments by order then remove it
+        stats["Units"]["queued_recruitments"] = sorted(stats["Units"]["queued_recruitments"], key=lambda x: x["order"])
+        stats["Units"]["queued_recruitments"] = [x.pop('order') for x in stats["Units"]["queued_recruitments"]]
+        #sort queued_upgrades by order then remove it
+        stats["Units"]["queued_upgrades"] = sorted(stats["Units"]["queued_upgrades"], key=lambda x: x["order"])
+        stats["Units"]["queued_upgrades"] = [x.pop('order') for x in stats["Units"]["queued_upgrades"]]
 
         # ----------------------
         # Initialize Resources
-        stats["Resources"] = {}
-        for resource, conf in game_config["Resources"].items():
-            stats["Resources"][resource] = conf.get("default", 0)
+        stats["Resources"] = player_resources
 
         # ----------------------
         # Load Quests from DB
@@ -85,19 +181,17 @@ class PlayerAPI:
         #    quest_index (that corresponds to the quest id from game_config)
         #    and a completed flag.
         stats["Quests"] = []
-        cur = self.db.cursor()
-        cur.execute("SELECT quest_index, completed, timestamp FROM quests WHERE player_id = ?", (self.player_id,))
-        quest_rows = cur.fetchall()
+
         # Assuming game_config["Quests"] is a list of quest templates (dictionaries)
         quest_templates = game_config.get("Quests", [])
-        for row in quest_rows:
+        for row in player_quests:
             # Find the matching quest template if it exists.
             matching = next((q for q in quest_templates if q["id"] == row["quest_index"]), None)
             if matching:
                 quest = matching.copy()
             else:
                 # Use a minimal structure if no matching template is found.
-                quest = {"id": row["quest_index"]}
+                quest = {"id": row["quest_index"]}###THIS SHOULD NOT HAPPEN
             quest["completed"] = bool(row["completed"])
             quest["timestamp"] = row["timestamp"]
             stats["Quests"].append(quest)
@@ -107,9 +201,7 @@ class PlayerAPI:
         # In this example we load all trade offers.
         # Depending on your game logic you might want to adjust the SQL (for example, showing only trades not created by the current player).
         stats["Trades"] = []
-        cur.execute("SELECT id, player_id, resources_cost, resources_earned, timestamp FROM trade_offers")
-        trade_rows = cur.fetchall()
-        for row in trade_rows:
+        for row in player_trades:
             try:
                 resources_cost = json.loads(row["resources_cost"])
             except Exception:
@@ -1094,7 +1186,6 @@ class GameAPI:
         • Finally, update the player's last_update timestamp.
         """
         cur = con.cursor()
-        now = datetime.datetime.now()
 
         # Get player's buildings and units.
         player_buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
@@ -1194,58 +1285,105 @@ class GameAPI:
         # Update the player's resources.
         for res, delta in resources_added.items():
             # Safe to use string formatting for column names because your resource names are known.
-            pass#cur.execute("UPDATE resources SET {} = {} + ? WHERE player_id = ?".format(res, res), (delta, player_id))
+            cur.execute("UPDATE resources SET {} = {} + ? WHERE player_id = ?".format(res, res), (delta, player_id))
 
         return []
 
     def update_quests(self, player_id, con):
         """
-        Checks each quest configuration. In our quest config each quest contains:
-            • func: a condition expressed (for example) as "Resources['diamond'] >= 5".
-            • reward: a string with one or more entries like "Resources.money = 1000" separated by '&'.
-        If the quest (which is not already completed) evaluates to True, the reward is applied and
-        the quest is marked complete (both in self.player_stats["Quests"] and—if desired—in the DB).
+        Updates player's quests by doing three things:
+        1. Retrieve the player's quests from the DB.
+        2. Check that the quests match the current game configuration: if there are missing quests,
+            add them; if there are extra (stale) quests, remove them.
+        3. For each quest in the config, if (a) it is not already completed and (b) its condition
+            (given in quest["func"]) evaluates True (using the player's current stats),
+            then mark it complete and apply the reward.
+        Returns a list of quest IDs which were completed in this update.
         """
-        # Build an evaluation environment with keys for Resources, Units, and Buildings.
-        # Note: We use the dictionaries from the player_stats.
-        env = {
-            "Resources": self.player_stats["Resources"],
-            # For units, we assume that it is the count that matters (for quest conditions)
-            "Units": self.player_stats["Units"]["count"],
-            "Buildings": self.player_stats["Buildings"]["levels"],
-        }
+
+        cur = con.cursor()
         
-        completed_quests = []
+        # (A) Get the player's current quests from the DB.
+        db_quests = {}
+        rows = cur.execute("SELECT * FROM quests WHERE player_id = ?", (player_id,)).fetchall()
+        for row in rows:
+            # We expect at least the columns: quest_index and completed.
+            db_quests[row["quest_index"]] = row
+
+        # (B) Ensure quests match configuration.
+        config_qids = set(q["id"] for q in game_config["Quests"])
+        db_qids = set(db_quests.keys())
+        # 1. INSERT any quest from config that the player does not already have.
         for quest in game_config["Quests"]:
             qid = quest["id"]
-            # Check if the quest is already marked complete in player_stats.
-            if self.player_stats["Quests"].get(qid, False):
-                continue  # already completed
-            # Evaluate the quest condition.
+            if qid not in db_qids:
+                cur.execute("""
+                    INSERT INTO quests (player_id, quest_index, completed)
+                    VALUES (?, ?, 0)
+                """, (player_id, qid))
+                # Add a new record in our local dict.
+                db_quests[qid] = {"quest_index": qid, "completed": 0}
+        # 2. DELETE any extra quests that are in the DB but not in our config.
+        for qid in list(db_qids):
+            if qid not in config_qids:
+                cur.execute("DELETE FROM quests WHERE player_id = ? AND quest_index = ?", (player_id, qid))
+                del db_quests[qid]
+        
+        completed_quests = []
+        
+        
+        player_resources = cur.execute("SELECT * FROM resources WHERE player_id = ?", (player_id,)).fetchone()
+        player_units = cur.execute("SELECT * FROM units WHERE player_id = ?", (player_id,)).fetchall()
+        player_buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
+
+        env = {
+            "Resources": {res: player_resources[res] for res in game_config["Resources"]},
+            # For units we assume that the count matters – note that if your existing code
+            # groups them further (e.g. by production building) adjust accordingly.
+            "Units": {u["unit_type"]: u["count"] for u in player_units},
+            "Buildings": {b["building_type"]: b["level"] for b in player_buildings}
+        }
+        
+        # (D) Evaluate quest completion and apply rewards.
+        for quest in game_config["Quests"]:
+            qid = quest["id"]
+            # Look up the DB record; if completed, skip.
+            # (We assume completed field is 1 for complete and 0 for in progress.)
+            quest_record = db_quests.get(qid)
+            if quest_record and quest_record["completed"]:
+                continue  # Already completed.
+            
             try:
-                # The func string should be written so that, for example, Resources['diamond'] >= 5.
-                if eval(quest["func"], {}, env):
-                    # Quest is complete. Mark as complete.
+                # The quest condition ("func") is a string representing a Python expression.
+                # Examples: "Resources['diamond'] >= 5" or "Resources.diamond >= 5"
+                if self.eval_quest_condition(quest["func"], env):
+                    # Mark quest complete in the DB.
+                    cur.execute("""
+                        UPDATE quests 
+                        SET completed = 1 
+                        WHERE player_id = ? AND quest_index = ?
+                    """, (player_id, qid))
+                    # Also update our in-memory record if desired.
                     self.player_stats["Quests"][qid] = True
                     completed_quests.append(qid)
                     
-                    # Now parse and apply the reward.
-                    # The reward string uses ampersand (&) to separate multiple rewards.
+                    # Split the reward by ampersand in case there is more than one part.
                     reward_entries = quest["reward"].split("&")
                     for entry in reward_entries:
-                        entry = entry.strip()  # e.g. "Resources.money = 1000"
+                        entry = entry.strip()  # e.g., "Resources.money = 1000"
                         if "=" not in entry:
                             continue
                         left, right = entry.split("=", 1)
                         left = left.strip()
                         right = right.strip()
-                        # In our config rewards we expect the left side to be of the form "Resources.<resource_name>"
+                        # In this configuration we handle rewards that adjust Resources.
                         if left.startswith("Resources."):
                             resource_name = left[len("Resources."):]
                             try:
                                 amount = float(right)
                             except ValueError:
                                 amount = 0
+                            # Award the resources.
                             self.player_stats["Resources"][resource_name] = \
                                 self.player_stats["Resources"].get(resource_name, 0) + amount
                             print("Quest", qid, "completed: Awarded", amount, resource_name)
@@ -1253,7 +1391,75 @@ class GameAPI:
                             print("Reward parse warning: unknown key in:", left)
             except Exception as e:
                 print("Error evaluating quest", qid, "condition:", e)
+        
+        # The function returns a list of quest IDs that were completed.
         return completed_quests
+
+
+
+    class DotDict(dict):
+        """
+        A dictionary that supports attribute-style access.
+        This allows code such as env.Resources.diamond instead of env["Resources"]["diamond"].
+        """
+        def __getattr__(self, attr):
+            try:
+                return self[attr]
+            except KeyError:
+                raise AttributeError(f"'DotDict' object has no attribute '{attr}'")
+        def __setattr__(self, attr, value):
+            self[attr] = value
+
+    def dict_to_dotdict(self, item):
+        """
+        Recursively converts dictionaries to DotDicts so that keys can be accessed as attributes.
+        """
+        if isinstance(item, dict):
+            # Convert each value.
+            return self.DotDict({key: self.dict_to_dotdict(value) for key, value in item.items()})
+        elif isinstance(item, list):
+            # Process each item in a list.
+            return [self.dict_to_dotdict(elem) for elem in item]
+        else:
+            return item
+        
+    def eval_quest_condition(self, func_str, env):
+        """
+        Evaluates the quest condition string using the provided environment.
+        
+        Parameters:
+        func_str – A string representing a quest condition. For example:
+                    "Resources['diamond'] >= 5" or "Buildings.Castle >= 8".
+        env – A dictionary with keys "Resources", "Units", "Buildings". Typically,
+                self.player_stats looks like:
+                {
+                    "Resources": {...},
+                    "Units": {"count": {...}},
+                    "Buildings": {"levels": {...}},
+                    ...
+                }
+                We convert these into DotDict objects so that dot notation can be used.
+        
+        Returns:
+        True if the condition evaluates to True; False otherwise.
+        
+        Security Note: Using eval always comes with risks.
+        This implementation deliberately disables __builtins__ so that most unwanted operations
+        are not permitted.
+        """
+        # Recursively convert the environment to allow dot access.
+        func_str = func_str.replace(" & ", " and ").replace(" | ", " or ")
+        
+        safe_env = {key: self.dict_to_dotdict(value) for key, value in env.items()}
+
+        # Optionally restrict access by disallowing builtins.
+        try:
+            result = eval(func_str, {"__builtins__": {}}, safe_env)
+            return bool(result)
+        except Exception as e:
+            print("Error evaluating quest condition:", func_str, "\nError:", e)
+            return False
+
 
     def update_progress(self, player_id):
         """
