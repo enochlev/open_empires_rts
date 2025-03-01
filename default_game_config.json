@@ -382,53 +382,53 @@
             "description": "A resource used to feed your villagers and soldiers.",
             "boost_multiplier": 1,
             "max": 1000,
-            "default": 100
+            "default": 4
         },
         "wood": {
             "description": "A resource used to build buildings and boats.",
             "boost_multiplier": 1,
             "max": 1000,
-            "default": 100
+            "default": 4
         },
         "stone": {
             "description": "A resource used to build buildings and walls.",
             "boost_multiplier": 1,
             "max": 1000,
-            "default": 100
+            "default": 0
         },
         "iron": {
             "description": "A resource used to build buildings and soldiers.",
             "boost_multiplier": 1,
             "max": 1000,
-            "default": 100
+            "default": 0
         },
         "gold": {
             "description": "A resource used to build buildings and soldiers.",
             "boost_multiplier": 1,
             "max": 1000,
-            "default": 100
+            "default": 0
         },
         "diamond": {
             "description": "A resource used to build buildings and soldiers.",
             "boost_multiplier": 1,
             "max": 1000,
-            "default": 100
+            "default": 0
         }
     },
     "Quests": 
     [
-        {"text": "Collect 5 diamonds", "reward": "resource.money = 1000", "func": "resource.diamond >= 5"},
-        {"text": "Gather 50 hay", "reward": "resource.money = 500", "func": "resource.hay >= 50"},
-        {"text": "Amass 100 iron", "reward": "resource.money = 500", "func": "resource.iron >= 100"},
-        {"text": "Accumulate 25 gold", "reward": "resource.money = 500", "func": "resource.gold >= 25"},
-        {"text": "Stockpile 100 stone", "reward": "resource.money = 250", "func": "resource.stone >= 100"},
-        {"text": "Train 10 soldiers", "reward": "resource.money = 300", "func": "unit.Soldier >= 10"},
-        {"text": "Have 8 buildings", "reward": "resource.money = 400", "func": "building.Castle >= 8"},
-        {"text": "Have 15 buildings", "reward": "resource.money = 800", "func": "building.Castle >= 15"},
-        {"text": "Harvest 100 wood", "reward": "resource.money = 200", "func": "resource.wood >= 100"},
-        {"text": "Forge 2 boats", "reward": "resource.money = 600", "func": "unit.Boat >= 2"},
-        {"text": "Conscript 5 cavalry", "reward": "resource.money = 350", "func": "unit.Calvary >= 5"},
-        {"text": "Construct a grand church", "reward": "resource.money = 800", "func": "building.Church >= 1"}
+        {"id":1, "text": "Collect 5 diamonds", "reward": "resource.money = 1000", "func": "resource.diamond >= 5"},
+        {"id":2, "text": "Gather 50 hay", "reward": "resource.money = 500", "func": "resource.hay >= 50"},
+        {"id":3, "text": "Amass 100 iron", "reward": "resource.money = 500", "func": "resource.iron >= 100"},
+        {"id":4, "text": "Accumulate 25 gold", "reward": "resource.money = 500", "func": "resource.gold >= 25"},
+        {"id":5, "text": "Stockpile 100 stone", "reward": "resource.money = 250", "func": "resource.stone >= 100"},
+        {"id":6, "text": "Train 10 soldiers", "reward": "resource.money = 300", "func": "unit.Soldier >= 10"},
+        {"id":7, "text": "Have 8 buildings", "reward": "resource.money = 400", "func": "building.Castle >= 8"},
+        {"id":8, "text": "Have 15 buildings", "reward": "resource.money = 800", "func": "building.Castle >= 15"},
+        {"id":9, "text": "Harvest 100 wood", "reward": "resource.money = 200", "func": "resource.wood >= 100"},
+        {"id":10, "text": "Forge 2 boats", "reward": "resource.money = 600", "func": "unit.Boat >= 2"},
+        {"id":11, "text": "Conscript 5 cavalry", "reward": "resource.money = 350", "func": "unit.Calvary >= 5"},
+        {"id":12, "text": "Construct a grand church", "reward": "resource.money = 800", "func": "building.Church >= 1"}
     ],
 
     "game_speed_and_multiplier":

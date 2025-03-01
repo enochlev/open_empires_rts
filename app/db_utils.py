@@ -194,8 +194,8 @@ def init_db():
     resource_string = ""
     for resource in all_resources:
         #maybe dfault resources is extra, but we will reset it on new player creation
-        default_value = str(int(game_config["Resources"][resource]["default_value"]))
-        resource_string += f"{resource} INTEGER DEFAULT {default_value}, "
+        default_value = str(int(game_config["Resources"][resource]["default"]))
+        resource_string += f"{resource} FLOAT DEFAULT {default_value}, "
     resource_string = resource_string[:-2]
 
     cur.execute(f"""
@@ -203,10 +203,21 @@ def init_db():
             resource_id INTEGER PRIMARY KEY AUTOINCREMENT,
             player_id INTEGER,
             {resource_string},
-            timestamp TIMESTAMP DEFAULT (datetime('now')),
             FOREIGN KEY(player_id) REFERENCES players(player_id)
         );
     """)
+    #if table exists make sure all resources are in the table
+    #if not add them with default values
+    #if extra resources are in the table, remove them
+
+    cur.execute(f"SELECT * FROM resources")
+    columns = [description[0] for description in cur.description]
+    for resource in all_resources:
+        if resource not in columns:
+            cur.execute(f"ALTER TABLE resources ADD COLUMN {resource} FLOAT DEFAULT {game_config['Resources'][resource]['default']}")
+    for column in columns:
+        if column not in list(all_resources) + ["resource_id", "player_id", "timestamp"]:
+            cur.execute(f"ALTER TABLE resources DROP COLUMN {column}")
     
     # A table for player buildings. For each building you can store:
     # level, any ongoing build progress (a float between 0 and 1) and a timestamp.
@@ -216,8 +227,6 @@ def init_db():
             player_id INTEGER,
             building_type TEXT,
             level INTEGER DEFAULT 0,
-            ongoing_build_progress REAL,  -- NULL if not building
-            timestamp TIMESTAMP DEFAULT (datetime('now')),
             FOREIGN KEY(player_id) REFERENCES players(player_id)
         );
     """)
@@ -231,9 +240,6 @@ def init_db():
             unit_type TEXT,
             count INTEGER DEFAULT 0,
             level INTEGER DEFAULT 0,
-            ongoing_production_progress REAL,  -- NULL means not currently in production
-            queued_count INTEGER DEFAULT 0,
-            timestamp TIMESTAMP DEFAULT (datetime('now')),
             FOREIGN KEY(player_id) REFERENCES players(player_id)
         );
     """)
@@ -269,12 +275,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS production_queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             player_id INTEGER,
-            production_type TEXT,      -- 'building' or 'unit'
-            entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Soldier')
+            production_type TEXT,      -- 'building' or 'unit' or 'resource' or 'research'
+            entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Soldier') or resource (e.g., 'money')
+            number_of_workers INTEGER, -- number of workers assigned to the task
             start_time TIMESTAMP DEFAULT (datetime('now')),
             duration REAL,             -- expected duration (in seconds, or hours) needed to complete
             progress REAL DEFAULT 0,     -- a float tracking current progress between 0 and 1
-            status TEXT DEFAULT 'in_progress',  -- could be in_progress, completed, or queued
+            status TEXT DEFAULT 'in_progress',  -- could be in_progress, or queued
             FOREIGN KEY(player_id) REFERENCES players(player_id)
         );
     """)
@@ -290,10 +297,20 @@ def add_new_player(name, plain_password):
     cur = con.cursor()
     
     password_hash = generate_password_hash(plain_password)
+    del plain_password  # Remove the plain password from memory.
+
+    #assert player username does not exist
+    cur.execute("SELECT player_id FROM players WHERE name = ?", (name,))
+    row = cur.fetchone()
+    if row:
+        con.close()
+        return row[0]
+        #return player_id
+    
     cur.execute("""
         INSERT OR IGNORE INTO players (name, password_hash, last_update)
-        VALUES (?, ?, datetime('now'))
-    """, (name, password_hash))
+        VALUES (?, ?, ?)
+    """, (name, password_hash, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     con.commit()
 
     if False:
@@ -317,18 +334,21 @@ def add_new_player(name, plain_password):
     value_string = ""
     for resource in game_config["Resources"]:
         resource_string += f"{resource}, "
-        value_string += f"{game_config['Resources'][resource]['default_value']}, "
+        value_string += f"{game_config['Resources'][resource]['default']}, "
     resource_string = resource_string[:-2]
     value_string = value_string[:-2]
     
     cur.execute(f"""
-        INSERT INTO resources (player_id, {resource_string}, timestamp)
-        VALUES (?, {value_string}, datetime('now'))
+        INSERT INTO resources (player_id, {resource_string})
+        VALUES (?, {value_string})
     """, (player_id,))
 
     
 
     for building in game_config["Buildings"].keys():
+        if game_config["Buildings"][building]["starting_level"] == 0:
+            continue
+        
         cur.execute("""
             INSERT INTO buildings (player_id, building_type, level, ongoing_build_progress)
             VALUES (?, ?, ?, NULL)
@@ -336,6 +356,8 @@ def add_new_player(name, plain_password):
 
 
     for unit in game_config["Units"].keys():
+        if game_config["Units"][unit]["start_amount"] == 0:
+            continue
         cur.execute("""
             INSERT INTO units (player_id, unit_type, count, level, ongoing_production_progress, queued_count)
             VALUES (?, ?, ?, ?, NULL, 0)
@@ -354,24 +376,39 @@ def add_new_player(name, plain_password):
     return player_id
 
 
-def create_session(player_id):
+def create_session(player_id, plain_password):
+
+    hashed_password = generate_password_hash(plain_password)
+    del plain_password  # Remove the plain password from memory.
+
+
     con = sqlite3.connect(DB_NAME)
     cur = con.cursor()
+
+
+    # Check if the player exists and the password matches.
+    cur.execute("SELECT player_id FROM players WHERE player_id = ? AND password_hash = ?", (player_id, hashed_password))
+    row = cur.fetchone()
+    if not row:
+        con.close()
+        return None
+
     # Generate a new session token (could use uuid4 for example).
     session_auth = str(uuid.uuid4())
     # SQLite expression datetime('now', '+24 hours') is used in the DEFAULT defined above;
     # however, you can also explicitly set it here if you want:
-    expires_at = datetime.datetime.now() + datetime.timedelta(hours=24)
+    now = datetime.datetime.now()
+    expires_at = now + datetime.timedelta(hours=24)
     
     cur.execute("""
         INSERT INTO sessions (player_id, session_auth, created_at, expires_at)
-        VALUES (?, ?, datetime('now'), ?)
-    """, (player_id, session_auth, expires_at.strftime("%Y-%m-%d %H:%M:%S")))
+        VALUES (?, ?, ?, ?)
+    """, (player_id, session_auth, now.strftime("%Y-%m-%d %H:%M:%S"), expires_at.strftime("%Y-%m-%d %H:%M:%S")))
     con.commit()
     con.close()
     return session_auth
 
-def validate_session(session_auth):
+def validate_session(player_id, session_auth):
     """Return the associated player_id if session is valid, or None otherwise."""
     con = sqlite3.connect(DB_NAME)
     cur = con.cursor()
@@ -382,6 +419,8 @@ def validate_session(session_auth):
     row = cur.fetchone()
     con.close()
     if row:
+        assert row[0] == player_id, "Player ID does not match session."
+
         expires_at = datetime.datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
         if datetime.datetime.now() < expires_at:
             return row[0]
@@ -535,78 +574,181 @@ def get_player_data(player_id, speed=3.5):
 
     con.close()
     return player_data
-
-
 def update_progress(player_id, speed=3.5):
+    """
+    Update resource income and production progress for a given player.
+    
+    This function does the following:
+      • Reads the last_update time for the player and computes effective elapsed hours.
+      • Queries the player's buildings and units.
+      • Uses the hourly_cost from the game config to update (reduce) resources (money, etc.).
+      • Computes the production boost from an existing Church (1.2^level).
+      • Looks up any production tasks in production_queue (for Farm, Lumber Mill, Quarry and Mines)
+        and adds production progress based on number of workers, building level and multipliers.
+      • If enough progress is earned (>=1) the resource is produced; in the case of Mines, a random
+        roll determines whether iron, gold or diamond is produced.
+      • Finally, both the resources table and production_queue table are updated along with the player's last_update.
+    """
     con = sqlite3.connect(DB_NAME)
+    # Use a row factory so that rows can be referenced by column name.
+    con.row_factory = sqlite3.Row
     cur = con.cursor()
     
-    # Get last_update time from the players table.
+    # 1. Get the last_update timestamp for the player.
     cur.execute("SELECT last_update FROM players WHERE player_id = ?", (player_id,))
     row = cur.fetchone()
     if not row:
+        print("No player with id", player_id)
         con.close()
         return
-    last_update_str = row[0]
-    last_update = datetime.datetime.strptime(last_update_str, "%Y-%m-%d %H:%M:%S")
-    
+    last_update = datetime.datetime.strptime(row["last_update"], "%Y-%m-%d %H:%M:%S")
     now = datetime.datetime.now()
     dt_seconds = (now - last_update).total_seconds()
-    # Calculate effective hours passed (dt in seconds/3600 multiplied by the game speed)
+    # hours_passed is computed from the elapsed time (in hours) multiplied by your speed factor
     hours_passed = (dt_seconds / 3600) * speed
+
+    # 2. Load multiplier settings from config.
+    gs = game_config["game_speed_and_multiplier"]["global_speed"]
+    bs = game_config["game_speed_and_multiplier"]["building_speed"]
+    us = game_config["game_speed_and_multiplier"]["unit_speed"]
+    rs = game_config["game_speed_and_multiplier"]["resource_speed"]
+    # We use the building_upgrade_boost_multiplier as our production “base” multiplier (as in your old code)
+    prod_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_boost_multiplier"]
+    unit_upgrade_multiplier = game_config["game_speed_and_multiplier"]["unit_upgrade_boost_multiplier"]
     
-    # Example: Updating resources (assume you computed an income rate somehow)
-    cur.execute("SELECT money FROM resources WHERE player_id = ?", (player_id,))
-    money = cur.fetchone()[0]
-    # Compute income: For example, your game logic computes income per hour (this is just a placeholder)
-    income_rate_per_hour = 10  # change this to your income calculation
-    new_money = money + income_rate_per_hour * hours_passed
-    cur.execute("UPDATE resources SET money = ?, timestamp = datetime('now') WHERE player_id = ?",
-                (int(new_money), player_id))
+    # 3. Get the player's buildings and units.
+    player_buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
+    player_units = cur.execute("SELECT * FROM units WHERE player_id = ?", (player_id,)).fetchall()
+
+    # 4. Compute Church boost (if any, a Church boosts production by 1.2 per level)
+    church_level = 0
+    for building in player_buildings:
+        if building["building_type"] == "Church":
+            church_level = building["level"]
+            break
+    church_multiplier = 1.2 ** church_level
+
+    # 5. Compute income/expense from buildings and units.
+    # Initialize a dictionary to accumulate changes.
+    resources_added = { "money": 0, "hay": 0, "wood": 0, "stone": 0, "diamond": 0, "gold": 0, "iron": 0 }
     
-    # Update any ongoing productions in the production_queue.
-    # Here we “advance” the progress based on the hours passed and the expected duration.
-    cur.execute("""
-      SELECT id, production_type, entity, duration, progress
-      FROM production_queue 
-      WHERE player_id = ? AND status = 'in_progress'
-    """, (player_id,))
-    for prod_id, prod_type, entity, duration, progress in cur.fetchall():
-        # For example, if duration is specified in hours,
-        # the fraction of completion is (hours_passed / duration)
-        new_progress = progress + (hours_passed / duration)
-        if new_progress >= 1:
-            new_progress = 1
-            # Production complete!
-            # Here, update the corresponding player stats (for example, increment building level or unit count)
-            if prod_type == "building":
-                # Update buildings table: raise level by 1, reset ongoing_build_progress.
-                cur.execute("""
-                   UPDATE buildings 
-                   SET level = level + 1, ongoing_build_progress = NULL, timestamp = datetime('now') 
-                   WHERE player_id = ? AND building_type = ?
-                """, (player_id, entity))
-            elif prod_type == "unit":
-                cur.execute("""
-                   UPDATE units 
-                   SET count = count + 1, ongoing_production_progress = NULL, timestamp = datetime('now')
-                   WHERE player_id = ? AND unit_type = ?
-                """, (player_id, entity))
-            # Mark production as completed:
-            cur.execute("UPDATE production_queue SET status = 'completed', progress = ? WHERE id = ?", (new_progress, prod_id))
-            
-            # Optionally, check for queued production items and start the next one.
-            # (This could involve setting status='in_progress', resetting start_time, etc.)
+    # Process building costs/income.
+    for building in player_buildings:
+        b_type = building["building_type"]
+        level = building["level"]
+        if b_type in game_config["Buildings"]:
+            hourly_cost = game_config["Buildings"][b_type]["hourly_cost"]
+            for res, cost in hourly_cost.items():
+                # In your old code the building’s money income was updated with:
+                #    income += building_level * - hourly_cost
+                # So here we subtract (cost × level) and then multiply by the hours passed and multipliers.
+                delta = cost * level * hours_passed * gs * bs * church_multiplier
+                resources_added[res] -= delta
         else:
-            # Update progress if still in progress.
-            cur.execute("UPDATE production_queue SET progress = ? WHERE id = ?", (new_progress, prod_id))
+            print("Warning: No building config for", b_type)
     
-    # Finally update the player’s last_update to now.
-    cur.execute("UPDATE players SET last_update = datetime('now') WHERE player_id = ?", (player_id,))
+    # Process unit costs/earnings.
+    for unit in player_units:
+        unit_type = unit["unit_type"]
+        count = unit["count"]
+        level = unit["level"]
+        if unit_type in game_config["Units"]:
+            hourly_cost = game_config["Units"][unit_type]["hourly_cost"]
+            for res, cost in hourly_cost.items():
+                # Note: your new code uses an exponent based on (level - 1).
+                delta = (cost ** (level - 1)) * count * hours_passed * gs * us * church_multiplier
+                resources_added[res] -= delta
+        else:
+            print("Warning: No unit config for", unit_type)
+
+    # 6. Process resource production from production_queue.
+    # We expect tasks for production_type 'resource' (with entities like "Farm", "Lumber Mill", "Quarry", "Mines").
+    production_tasks = cur.execute("""
+        SELECT * FROM production_queue 
+        WHERE player_id = ? 
+          AND production_type = 'resource'
+          AND status = 'in_progress'
+    """, (player_id,)).fetchall()
+    
+    # For each production task, add production progress.
+    for task in production_tasks:
+        entity = task["entity"]  # For example "Farm", "Lumber Mill", etc.
+        workers = task["number_of_workers"]
+        current_progress = task["progress"]
+        # Get the building level for the corresponding entity.
+        building_level = None
+        for b in player_buildings:
+            if b["building_type"] == entity:
+                building_level = b["level"]
+                break
+        if (building_level is None) or (building_level == 0):
+            # No valid building; skip production for this task.
+            continue
+        
+        # Production rate follows a formula similar to your old code:
+        # progress += (prod_multiplier^(building_level - 1)) * workers * hours_passed * church_multiplier
+        # In addition, we multiply by the global and resource speed multipliers.
+        production_rate = (prod_multiplier ** (building_level - 1)) * workers * hours_passed * gs * rs * church_multiplier
+        
+        new_progress = current_progress + production_rate
+        whole_units = int(new_progress)  # whole production units that were reached
+        remainder = new_progress - whole_units
+        
+        # For each resource-producing building adjust the appropriate resource.
+        if entity == "Farm":
+            # Farm produces hay (whole unit means 1 hay)
+            resources_added["hay"] += whole_units
+        elif entity == "Lumber Mill":
+            # Lumber Mill produces wood
+            resources_added["wood"] += whole_units
+        elif entity == "Quarry":
+            # Quarry produces stone
+            resources_added["stone"] += whole_units
+        elif entity == "Mines":
+            # For each whole unit produced by a mine, roll to decide what is produced.
+            # (If roll <= 5: diamond, elif roll <= 20: gold; otherwise iron.)
+            for _ in range(whole_units):
+                roll = random.randint(1, 100)
+                if roll <= 5:
+                    resources_added["diamond"] += 1
+                elif roll <= 20:
+                    resources_added["gold"] += 1
+                else:
+                    resources_added["iron"] += 1
+        else:
+            print("Warning: Unknown production entity", entity)
+        
+        # Update the production task’s progress (keep the fractional remainder)
+        cur.execute("UPDATE production_queue SET progress = ? WHERE id = ?", (remainder, task["id"]))
+
+    # 7. Update the player's resources.
+    # Here we loop through the keys we expect and update using a separate query.
+    for res, amount in resources_added.items():
+        # Using string formatting for column names is safe here because these keys are predefined.
+        cur.execute("UPDATE resources SET {} = {} + ? WHERE player_id = ?".format(res, res), (amount, player_id))
+    
+    # 8. Overwrite last_update to now.
+    cur.execute("UPDATE players SET last_update = ? WHERE player_id = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), player_id))
     
     con.commit()
     con.close()
 
+
+def create_dataframes():
+    import pandas as pd
+
+    con = sqlite3.connect(DB_NAME)
+
+    df_players = pd.read_sql_query("SELECT * FROM players", con)
+    df_resources = pd.read_sql_query("SELECT * FROM resources", con)
+    df_buildings = pd.read_sql_query("SELECT * FROM buildings", con)
+    df_units = pd.read_sql_query("SELECT * FROM units", con)
+    df_trade_offers = pd.read_sql_query("SELECT * FROM trade_offers", con)
+    df_quests = pd.read_sql_query("SELECT * FROM quests", con)
+    df_production_queue = pd.read_sql_query("SELECT * FROM production_queue", con)
+
+    con.close()
+    return {"players": df_players, "resources": df_resources, "buildings": df_buildings, "units": df_units, "trade_offers": df_trade_offers, "quests": df_quests, "production_queue": df_production_queue}
 
 
 # If run as a script, initialize the DB.
@@ -614,10 +756,13 @@ if __name__ == '__main__':
     init_db()
     # To test adding a new player:
     new_player_id = add_new_player("Player 1","password")
-    if new_player_id:
-        print("Added new player with ID:", new_player_id)
-    else:
-        print("Player already exists or there was an error.")
+    session_id = create_session(new_player_id, "password")
+    
+    session_valid = validate_session(new_player_id, session_id)
+    if session_valid == None:
+        print("Session not valid")
+
+    #create_dataframes()
 
     update_progress(new_player_id)
     import time
