@@ -19,9 +19,11 @@ class PlayerAPI:
     def load_player_stats(self):
         """
          {
+            "Player Name": "Marcus1233",
+            "Player ID": 1,
             "Buildings": {
                 "levels": {"Castle": 1, "Village House": 1, "Church": 1, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 1},
-                "assigned_workers": {"Castle": 0, "Village House": 0, "Church": 0, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 0},
+                "ongoing_resources_collection: [{"building": "Farm", "progress": 0.5, "number_of_workers": 3}, {"building": "Farm", "progress": 0.2, "number_of_workers": 2}],
                 "ongoing_builds": {"building": "Castle","progress":0.4344, "number_of_workers":3, "level":2},
                 "queued_builds": [{"building": "Castle","level":3}, {"building": "Castle","level":4}],
             },
@@ -87,12 +89,19 @@ class PlayerAPI:
         player_trades = cur.execute("SELECT * FROM trade_offers").fetchall()
         player_trades = [dict(row) for row in player_trades]
 
+
+       
+        stats = {}
+        stats["Player Name"] = cur.execute("SELECT name FROM players WHERE player_id = ?", (self.player_id,)).fetchone()["name"]
+        stats["Player ID"] = self.player_id
+
+    
+
         # ----------------------
         # Initialize Buildings
-        stats = {}
         stats["Buildings"] = {}
         stats["Buildings"]["levels"] = {}
-        stats["Buildings"]["assigned_workers"] = {}
+        stats["Buildings"]["ongoing_resources_collection"] = []
         stats["Buildings"]["ongoing_builds"] = {}
         stats["Buildings"]["queued_builds"] = []
         for building, conf in game_config["Buildings"].items():
@@ -103,7 +112,7 @@ class PlayerAPI:
             #search if there are assinged workers for resource collection
             for queue in player_queues:
                 if queue["production_type"] == "resource" and queue["entity"] == building:
-                    stats["Buildings"]["assigned_workers"][building] = queue["number_of_workers"]
+                    stats["Buildings"]["ongoing_resources_collection"] += [{"building": building, "progress": queue["progress"], "number_of_workers": queue["number_of_workers"]}]
                     break
             
             #search if there are ongoing builds
@@ -221,6 +230,8 @@ class PlayerAPI:
                 "timestamp": row["timestamp"]
             }
             stats["Trades"].append(trade)
+
+        cur.close()
 
         return stats
 

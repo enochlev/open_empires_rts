@@ -146,27 +146,8 @@ def dashboard():
     player_api = PlayerAPI(player_id) 
 
 
-    get_player_data = player_api.load_player_stats()
+    player_data = player_api.load_player_stats()
 
-
-
-    updated_quests = []
-    #enumrate to get index and quest
-    for quest_id in range(len(quests)):
-        quest_copy = quests[quest_id].copy()
-        quest_copy['completed'] = player.player_stats["Quests"][quest_id]
-        updated_quests.append(quest_copy)
-
-    #list of dicts
-    trades = global_trades.copy()
-    for trade in trades:
-        trade["player"] = "global"
-        
-    for player_ in players:
-        #exclude current player
-        for trade in players[player_].player_stats["Market"]["listings"]:
-            trade["player"] = player_
-            trades.append(trade)
 
     message = None
     if request.method == 'POST':
@@ -193,6 +174,7 @@ def dashboard():
         elif 'remove_trade_offer' in request.form:
             trade_index = int(request.form.get('trade_index'))
             
+            trades = get_player_data["Trades"]
             for i in range(len(trades)):
                 if trades[i]["player"] != player_name:
                     trade_index -= 1
@@ -229,12 +211,12 @@ def dashboard():
         return redirect(url_for('empire_game.dashboard'))
     
         # Add more POST request handling for other actions like adding/removing citizens, miners, etc.
-    player = players[player_name]
 
-    periodic_task()
-    message = session.pop('message', None)
 
-    game_data = game_data = {
+    
+    #message = session.pop('message', None)
+
+    render_data = {
         "main_image": "background.png",
         "buildings": [
             #{"path": "Market1.png", "x": 800, "y": 500,"scale":.4},
@@ -276,18 +258,18 @@ def dashboard():
         ]
     }
     
-    with open("building_map.json") as f:
-        building_map = json.load(f)
+    # with open("building_map.json") as f:
+    #     building_map = json.load(f)
 
-    for building in player.player_stats["Buildings"]["levels"]:
-        level = player.player_stats["Buildings"]["levels"][building]
-        if level > 0:
-            id = building + str(level)
-            if id in building_map: 
-                #print(building_map[id])
-                game_data["buildings"].append(building_map[id]) 
+    # for building in player.player_stats["Buildings"]["levels"]:
+    #     level = player.player_stats["Buildings"]["levels"][building]
+    #     if level > 0:
+    #         id = building + str(level)
+    #         if id in building_map: 
+    #             #print(building_map[id])
+    #             game_data["buildings"].append(building_map[id]) 
 
-    return render_template('dashboard.html', current_players=list(players.keys()),render=game_data, player=player.player_stats, quests=updated_quests, trades=trades, game_config=game_config, message = message)
+    return render_template('dashboard.html', player_data=player_data, game_config=game_config, message = message, render_data=render_data)
 
 # Additional routes for specific actions like adding/removing miners, managing farms, etc.
 
