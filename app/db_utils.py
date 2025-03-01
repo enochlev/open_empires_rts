@@ -2,7 +2,7 @@ import sqlite3
 import datetime
 import json
 import uuid
-
+import random
 
 game_config = {}
 with open("default_game_config.json") as f:
@@ -350,8 +350,8 @@ def add_new_player(name, plain_password):
             continue
         
         cur.execute("""
-            INSERT INTO buildings (player_id, building_type, level, ongoing_build_progress)
-            VALUES (?, ?, ?, NULL)
+            INSERT INTO buildings (player_id, building_type, level)
+            VALUES (?, ?, ?)
         """, (player_id, building, game_config["Buildings"][building]["starting_level"]))
 
 
@@ -359,8 +359,8 @@ def add_new_player(name, plain_password):
         if game_config["Units"][unit]["start_amount"] == 0:
             continue
         cur.execute("""
-            INSERT INTO units (player_id, unit_type, count, level, ongoing_production_progress, queued_count)
-            VALUES (?, ?, ?, ?, NULL, 0)
+            INSERT INTO units (player_id, unit_type, count, level)
+            VALUES (?, ?, ?, ?)
         """, (player_id, unit, game_config["Units"][unit]["start_amount"], game_config["Units"][unit]["starting_level"]))
     
 
@@ -574,139 +574,357 @@ def get_player_data(player_id, speed=3.5):
 
     con.close()
     return player_data
-def update_progress(player_id, speed=3.5):
-    """
-    Update resource income and production progress for a given player.
-    
-    This function does the following:
-      • Reads the last_update time for the player and computes effective elapsed hours.
-      • Queries the player's buildings and units.
-      • Uses the hourly_cost from the game config to update (reduce) resources (money, etc.).
-      • Computes the production boost from an existing Church (1.2^level).
-      • Looks up any production tasks in production_queue (for Farm, Lumber Mill, Quarry and Mines)
-        and adds production progress based on number of workers, building level and multipliers.
-      • If enough progress is earned (>=1) the resource is produced; in the case of Mines, a random
-        roll determines whether iron, gold or diamond is produced.
-      • Finally, both the resources table and production_queue table are updated along with the player's last_update.
-    """
-    con = sqlite3.connect(DB_NAME)
-    # Use a row factory so that rows can be referenced by column name.
-    con.row_factory = sqlite3.Row
-    cur = con.cursor()
-    
-    # 1. Get the last_update timestamp for the player.
-    cur.execute("SELECT last_update FROM players WHERE player_id = ?", (player_id,))
-    row = cur.fetchone()
-    if not row:
-        print("No player with id", player_id)
-        con.close()
-        return
-    last_update = datetime.datetime.strptime(row["last_update"], "%Y-%m-%d %H:%M:%S")
-    now = datetime.datetime.now()
-    dt_seconds = (now - last_update).total_seconds()
-    # hours_passed is computed from the elapsed time (in hours) multiplied by your speed factor
-    hours_passed = (dt_seconds / 3600) * speed
 
-    # 2. Load multiplier settings from config.
+
+def update_unit_production(player_id, hours_passed, con):
+    """
+    Process production_queue entries of type 'unit_production'.
+    In these tasks the entity field is in the format "Building.Unit" (for example "Stables.Calvary").
+    We group tasks by the production building first (so that production is affected by that building’s level)
+    and then by unit type.
+    
+    For each queued task we:
+      • Look up the unit config (using game_config["Units"]).
+      • Calculate a rate based on:
+             rate = (1 / hours_to_build)
+                    × smithy_boost           (from player's Smithy level)
+                    × (unit_upgrade_multiplier^(production_building_level - 1))
+      • Increment the task’s progress by: progress += hours_passed * rate.
+      • If progress ≥ 1 then complete that task (update the unit count and remove the queue row).
+      • Otherwise update progress and compute an expected finish time.
+      
+    Returns a list of datetime objects for the next expected completion times.
+    """
+    cur = con.cursor()
+    # Get all queued unit production tasks.
+    prod_tasks = cur.execute("""
+        SELECT *
+          FROM production_queue
+         WHERE player_id = ?
+           AND production_type = 'unit_production'
+         ORDER BY start_time
+    """, (player_id,)).fetchall()
+    
+    # Group tasks by production building and then by unit type.
+    # Instead of using defaultdict – we do this manually.
+    groups = {}
+    for task in prod_tasks:
+        # We expect the entity to be in the form "Building.Unit", e.g., "Stables.Calvary".
+        parts = task["entity"].split('.')
+        if len(parts) != 2:
+            print("Invalid entity format in unit production task:", task["entity"])
+            continue
+        prod_building, unit_type = parts
+        if prod_building not in groups:
+            groups[prod_building] = {}
+        if unit_type not in groups[prod_building]:
+            groups[prod_building][unit_type] = []
+        groups[prod_building][unit_type].append(task)
+    
+    # Fetch the player’s buildings (to get levels for production buildings and Smithy).
+    buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
+    building_levels = {b["building_type"]: b["level"] for b in buildings}
+    
+    # Smithy always affects unit production – get its level and compute boost.
+    smithy_level = building_levels.get("Smithy", 0)
+    smithy_boost = 1.2 ** smithy_level
+    unit_upgrade_multiplier = game_config["game_speed_and_multiplier"]["unit_upgrade_boost_multiplier"]
+    
+    expected_timestamps = []
+    now = datetime.datetime.now()
+    
+    # Process each production building group.
+    for prod_building in groups:
+        # The production building level affects the rate.
+        current_building_level = building_levels.get(prod_building, 0)
+        if current_building_level == 0:
+            # If the production building isn’t available, skip these tasks.
+            continue
+        for unit_type in groups[prod_building]:
+            # Make sure this unit exists in the game config.
+            if unit_type not in game_config["Units"].keys():
+                print("Warning: Unit config not found for", unit_type)
+                continue
+            unit_config = game_config["Units"][unit_type]
+            hours_to_build = unit_config["hours_to_build"]
+            # Compute the production rate for this unit:
+            # rate (units per hour) = (1 / hours_to_build)
+            #                           × smithy_boost
+            #                           × (unit_upgrade_multiplier^(current_building_level - 1))
+            rate = (1.0 / hours_to_build) * smithy_boost * (unit_upgrade_multiplier ** (current_building_level - 1))
+            
+            # Sort tasks (by start_time) for this production building/unit group.
+            tasks_list = sorted(groups[prod_building][unit_type], key=lambda x: x["start_time"])
+            for task in tasks_list:
+                prog = task["progress"]
+                new_prog = prog + hours_passed * rate
+                if new_prog >= 1:
+                    # Complete the production: add one unit to the player's count.
+                    cur.execute("""
+                        UPDATE units 
+                           SET count = count + 1 
+                         WHERE player_id = ? AND unit_type = ?
+                    """, (player_id, unit_type))
+                    # Remove the completed production task.
+                    cur.execute("DELETE FROM production_queue WHERE id = ?", (task["id"],))
+                    # (If you wish, you can check leftover progress and immediately process the next task.)
+                else:
+                    # Still in progress – update the task’s progress.
+                    cur.execute("UPDATE production_queue SET progress = ? WHERE id = ?", (new_prog, task["id"]))
+                    remaining = 1 - new_prog
+                    expected_hours = remaining / rate if rate > 0 else float('inf')
+                    expected_timestamps.append(now + datetime.timedelta(hours=expected_hours))
+                    # Only process the first incomplete task for this unit type.
+                    break
+    return expected_timestamps
+
+def update_unit_research(player_id, hours_passed, con):
+    """
+    Process production_queue entries of type 'unit_research'. These tasks are assumed
+    to be for upgrading a unit (i.e. “research”) and are affected only by Smithy level and global speed.
+    The entity field in these tasks is assumed to be just the unit name.
+    
+    For each research task we:
+      • Look up the unit config (using game_config["Units"]).
+      • Determine the research time (using unit_config["hours_to_research"] if available,
+        or defaulting to unit_config["hours_to_build"]).
+      • Compute a rate:
+             rate = (1 / hours_to_research)
+                    × smithy_boost    (from player’s Smithy level)
+                    × global_speed  (from game_config multiplier)
+      • Update progress by: progress += hours_passed * rate.
+      • If progress ≥ 1 then complete this research (for example, increment the unit’s level)
+        and remove the queue row.
+      • Otherwise update progress and compute an expected finish timestamp.
+    
+    Returns a list of expected completion timestamps.
+    """
+    cur = con.cursor()
+    research_tasks = cur.execute("""
+       SELECT *
+         FROM production_queue
+        WHERE player_id = ?
+          AND production_type = 'unit_research'
+        ORDER BY start_time
+    """, (player_id,)).fetchall()
+    
+    # Get the Smithy level from the player's buildings.
+    buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
+    building_levels = {b["building_type"]: b["level"] for b in buildings}
+    smithy_level = building_levels.get("Smithy", 0)
+    smithy_boost = 1.2 ** smithy_level
+    
+    gs = game_config["game_speed_and_multiplier"]["global_speed"]
+    
+    expected_timestamps = []
+    now = datetime.datetime.now()
+    
+    for task in research_tasks:
+        # For research, we assume entity is just the unit name.
+        unit_type = task["entity"]
+        if unit_type not in game_config["Units"].keys():
+            print("Warning: Unit config not found for research unit", unit_type)
+            continue
+        unit_config = game_config["Units"][unit_type]
+        # Use a research-specific time if provided; if not, default to hours_to_build.
+        hours_to_research = unit_config.get("hours_to_research", unit_config["hours_to_build"])
+        # Compute research rate: note that only Smithy and global speed affect research.
+        rate = (1.0 / hours_to_research) * smithy_boost * gs
+        
+        prog = task["progress"]
+        new_prog = prog + hours_passed * rate
+        if new_prog >= 1:
+            # Research is complete – update the unit’s research upgrade,
+            # for example by incrementing its level.
+            cur.execute("""
+                UPDATE units 
+                   SET level = level + 1 
+                 WHERE player_id = ? AND unit_type = ?
+            """, (player_id, unit_type))
+            cur.execute("DELETE FROM production_queue WHERE id = ?", (task["id"],))
+        else:
+            cur.execute("UPDATE production_queue SET progress = ? WHERE id = ?", (new_prog, task["id"]))
+            remaining = 1 - new_prog
+            expected_hours = remaining / rate if rate > 0 else float('inf')
+            expected_timestamps.append(now + datetime.timedelta(hours=expected_hours))
+            # Only process one in-progress research task per unit.
+    return expected_timestamps
+
+def update_units(player_id, hours_passed, con):
+    """
+    Master update routine for units. This calls both the unit production and the 
+    unit research update functions and returns a list of expected completion timestamps.
+    These timestamps can then be used (for example) to inform when the next unit 
+    or research upgrade will complete.
+    """
+    production_times = update_unit_production(player_id, hours_passed, con)
+    research_times = update_unit_research(player_id, hours_passed, con)
+    return production_times + research_times
+
+# ----------------------------------------------------------------
+def update_buildings(player_id, hours_passed, con):
+    """
+    Process production_queue entries of type "building".
+    
+    For each building production task:
+      • Look up the building’s hours to build.
+      • Production progress is incremented by:
+            progress += (number_of_workers * global_speed * building_speed * hours_passed) 
+                          / (hours_to_build * (upgrade_multiplier ** (current_level - 1)))
+      • If progress >= 1 then the building upgrade is complete and we increment 
+        the player’s building level (and remove the queue item). (Extra progress
+        could be cascaded onto the next queued item if you wish.)
+      • For an incomplete task we compute an expected completion timestamp.
+    """
+    cur = con.cursor()
+    # Get player buildings so we know current levels.
+    buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
+    building_levels = {b["building_type"]: b["level"] for b in buildings}
+    
+    expected_timestamps = []
+    now = datetime.datetime.now()
+
+    # Get production tasks of type building.
+    bld_queue = cur.execute("""
+        SELECT *
+          FROM production_queue 
+         WHERE player_id = ? 
+           AND production_type = 'building'
+         ORDER BY start_time
+    """, (player_id,)).fetchall()
+
+    for item in bld_queue:
+        bld_type = item["entity"]
+        curr_level = building_levels.get(bld_type, 0)
+        if curr_level == 0:
+            # Skip if the building is not yet built.
+            continue
+        if bld_type not in game_config["Buildings"]:
+            print("Warning: No building config for", bld_type)
+            continue
+
+        hours_to_build = game_config["Buildings"][bld_type]["hours_to_build"]
+        workers = item["number_of_workers"]
+        upgrade_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_boost_multiplier"]
+        gs = game_config["game_speed_and_multiplier"]["global_speed"]
+        bs = game_config["game_speed_and_multiplier"]["building_speed"]
+
+        # Calculate production rate for building upgrades (per hour).
+        rate = workers * gs * bs / (hours_to_build * (upgrade_multiplier ** (curr_level - 1)))
+        prog = item["progress"]
+        new_prog = prog + hours_passed * rate
+        if new_prog >= 1:
+            # Complete the building production: increase level.
+            cur.execute("""
+                UPDATE buildings 
+                   SET level = level + 1 
+                 WHERE player_id = ? AND building_type = ?
+            """, (player_id, bld_type))
+            cur.execute("DELETE FROM production_queue WHERE id = ?", (item["id"],))
+            # (Extra progress could be passed on to next queued production if you wish.)
+        else:
+            cur.execute("UPDATE production_queue SET progress = ? WHERE id = ?", (new_prog, item["id"]))
+            remaining = 1 - new_prog
+            expected_hours = remaining / rate if rate > 0 else float('inf')
+            expected_timestamps.append(now + datetime.timedelta(hours=expected_hours))
+            # Process only one in‐progress building task per type for now.
+    return expected_timestamps
+
+# ----------------------------------------------------------------
+def update_resources(player_id, hours_passed, con):
+    """
+    Update the player's resources. In this step:
+      • Buildings and units subtract (or add) resources (using configured hourly_costs).
+      • Production tasks of type "resource"—which represent infinite production (e.g., a Farm producing hay)
+        —have their progress incremented.
+      • The corresponding resource is produced when the production progress reaches one whole unit,
+        and only the fractional remainder is retained.
+      • Finally, update the player's last_update timestamp.
+    """
+    cur = con.cursor()
+    now = datetime.datetime.now()
+
+    # Get player's buildings and units.
+    player_buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
+    player_units = cur.execute("SELECT * FROM units WHERE player_id = ?", (player_id,)).fetchall()
+
+    # Compute church boost (if any).
+    church_level = 0
+    for b in player_buildings:
+        if b["building_type"] == "Church":
+            church_level = b["level"]
+            break
+    church_multiplier = 1.2 ** church_level
+
+    # Initialize resource delta dictionary.
+    resources_added = {res: 0 for res in game_config["Resources"]}
+
     gs = game_config["game_speed_and_multiplier"]["global_speed"]
     bs = game_config["game_speed_and_multiplier"]["building_speed"]
     us = game_config["game_speed_and_multiplier"]["unit_speed"]
     rs = game_config["game_speed_and_multiplier"]["resource_speed"]
-    # We use the building_upgrade_boost_multiplier as our production “base” multiplier (as in your old code)
-    prod_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_boost_multiplier"]
-    unit_upgrade_multiplier = game_config["game_speed_and_multiplier"]["unit_upgrade_boost_multiplier"]
-    
-    # 3. Get the player's buildings and units.
-    player_buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
-    player_units = cur.execute("SELECT * FROM units WHERE player_id = ?", (player_id,)).fetchall()
 
-    # 4. Compute Church boost (if any, a Church boosts production by 1.2 per level)
-    church_level = 0
-    for building in player_buildings:
-        if building["building_type"] == "Church":
-            church_level = building["level"]
-            break
-    church_multiplier = 1.2 ** church_level
-
-    # 5. Compute income/expense from buildings and units.
-    # Initialize a dictionary to accumulate changes.
-    resources_added = { "money": 0, "hay": 0, "wood": 0, "stone": 0, "diamond": 0, "gold": 0, "iron": 0 }
-    
-    # Process building costs/income.
-    for building in player_buildings:
-        b_type = building["building_type"]
-        level = building["level"]
+    # Process building income/expenses.
+    for b in player_buildings:
+        b_type = b["building_type"]
+        lvl = b["level"]
         if b_type in game_config["Buildings"]:
             hourly_cost = game_config["Buildings"][b_type]["hourly_cost"]
             for res, cost in hourly_cost.items():
-                # In your old code the building’s money income was updated with:
-                #    income += building_level * - hourly_cost
-                # So here we subtract (cost × level) and then multiply by the hours passed and multipliers.
-                delta = cost * level * hours_passed * gs * bs * church_multiplier
+                delta = cost * lvl * hours_passed * gs * bs * church_multiplier
                 resources_added[res] -= delta
         else:
             print("Warning: No building config for", b_type)
-    
-    # Process unit costs/earnings.
+
+    # Process unit income/expenses.
     for unit in player_units:
         unit_type = unit["unit_type"]
         count = unit["count"]
-        level = unit["level"]
+        lvl = unit["level"]
         if unit_type in game_config["Units"]:
             hourly_cost = game_config["Units"][unit_type]["hourly_cost"]
             for res, cost in hourly_cost.items():
-                # Note: your new code uses an exponent based on (level - 1).
-                delta = (cost ** (level - 1)) * count * hours_passed * gs * us * church_multiplier
+                # Note: using exponent (lvl - 1) as in your old code.
+                delta = (cost ** (lvl - 1)) * count * hours_passed * gs * us * church_multiplier
                 resources_added[res] -= delta
         else:
             print("Warning: No unit config for", unit_type)
 
-    # 6. Process resource production from production_queue.
-    # We expect tasks for production_type 'resource' (with entities like "Farm", "Lumber Mill", "Quarry", "Mines").
-    production_tasks = cur.execute("""
-        SELECT * FROM production_queue 
-        WHERE player_id = ? 
-          AND production_type = 'resource'
-          AND status = 'in_progress'
+    # Process production tasks of type "resource"
+    resource_queue = cur.execute("""
+        SELECT *
+          FROM production_queue 
+         WHERE player_id = ?
+           AND production_type = 'resource'
+           AND status = 'in_progress'
     """, (player_id,)).fetchall()
-    
-    # For each production task, add production progress.
-    for task in production_tasks:
-        entity = task["entity"]  # For example "Farm", "Lumber Mill", etc.
-        workers = task["number_of_workers"]
-        current_progress = task["progress"]
-        # Get the building level for the corresponding entity.
-        building_level = None
+    # For resource production, we “never” remove the queue item.
+    prod_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_boost_multiplier"]
+    for item in resource_queue:
+        entity = item["entity"]  # e.g., "Farm", "Lumber Mill", etc.
+        workers = item["number_of_workers"]
+        curr_prog = item["progress"]
+        # Find the corresponding building level (skip if not found).
+        bld_level = None
         for b in player_buildings:
             if b["building_type"] == entity:
-                building_level = b["level"]
+                bld_level = b["level"]
                 break
-        if (building_level is None) or (building_level == 0):
-            # No valid building; skip production for this task.
+        if (bld_level is None) or (bld_level == 0):
             continue
-        
-        # Production rate follows a formula similar to your old code:
-        # progress += (prod_multiplier^(building_level - 1)) * workers * hours_passed * church_multiplier
-        # In addition, we multiply by the global and resource speed multipliers.
-        production_rate = (prod_multiplier ** (building_level - 1)) * workers * hours_passed * gs * rs * church_multiplier
-        
-        new_progress = current_progress + production_rate
-        whole_units = int(new_progress)  # whole production units that were reached
-        remainder = new_progress - whole_units
-        
-        # For each resource-producing building adjust the appropriate resource.
+
+        rate = (prod_multiplier ** (bld_level - 1)) * workers * hours_passed * gs * rs * church_multiplier
+        new_prog = curr_prog + rate
+        whole_units = int(new_prog)
+        remainder = new_prog - whole_units
+
         if entity == "Farm":
-            # Farm produces hay (whole unit means 1 hay)
             resources_added["hay"] += whole_units
         elif entity == "Lumber Mill":
-            # Lumber Mill produces wood
             resources_added["wood"] += whole_units
         elif entity == "Quarry":
-            # Quarry produces stone
             resources_added["stone"] += whole_units
         elif entity == "Mines":
-            # For each whole unit produced by a mine, roll to decide what is produced.
-            # (If roll <= 5: diamond, elif roll <= 20: gold; otherwise iron.)
             for _ in range(whole_units):
                 roll = random.randint(1, 100)
                 if roll <= 5:
@@ -718,20 +936,54 @@ def update_progress(player_id, speed=3.5):
         else:
             print("Warning: Unknown production entity", entity)
         
-        # Update the production task’s progress (keep the fractional remainder)
-        cur.execute("UPDATE production_queue SET progress = ? WHERE id = ?", (remainder, task["id"]))
+        cur.execute("UPDATE production_queue SET progress = ? WHERE id = ?", (remainder, item["id"]))
 
-    # 7. Update the player's resources.
-    # Here we loop through the keys we expect and update using a separate query.
-    for res, amount in resources_added.items():
-        # Using string formatting for column names is safe here because these keys are predefined.
-        cur.execute("UPDATE resources SET {} = {} + ? WHERE player_id = ?".format(res, res), (amount, player_id))
+    # Update the player's resources.
+    for res, delta in resources_added.items():
+        # Safe to use string formatting for column names because your resource names are known.
+        cur.execute("UPDATE resources SET {} = {} + ? WHERE player_id = ?".format(res, res), (delta, player_id))
+
+    # Update player's last_update timestamp.
+    cur.execute("UPDATE players SET last_update = ? WHERE player_id = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), player_id))
+
+    # No expected timestamps are returned from resource update.
+    return
+
+def update_progress(player_id):
+    """
+    Example update_progress routine that calls update_units (as well as other update functions).
+    """
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
     
-    # 8. Overwrite last_update to now.
+    cur.execute("SELECT last_update FROM players WHERE player_id = ?", (player_id,))
+    row = cur.fetchone()
+    if not row:
+        print("No player with id", player_id)
+        con.close()
+        return
+
+    last_update = datetime.datetime.strptime(row["last_update"], "%Y-%m-%d %H:%M:%S")
+    now = datetime.datetime.now()
+    dt_seconds = (now - last_update).total_seconds()
+    hours_passed = dt_seconds / 3600.0
+
+    # Update units (production and research)
+    unit_timestamps = update_units(player_id, hours_passed, con)
+    
+    # ... you could call update_buildings(player_id, hours_passed, con) and update_resources(player_id, hours_passed, con) here
+    update_resources(player_id, hours_passed, con)
+    update_units(player_id, hours_passed, con)
+    update_buildings(player_id, hours_passed, con)
+
+    # Update the player's last_update time.
     cur.execute("UPDATE players SET last_update = ? WHERE player_id = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), player_id))
     
     con.commit()
     con.close()
+    
+    return unit_timestamps
 
 
 def create_dataframes():
