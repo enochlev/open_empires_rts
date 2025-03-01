@@ -8,6 +8,456 @@ game_config = {}
 with open("default_game_config.json") as f:
     game_config = json.load(f)
 
+
+class GameAPI:
+    def __init__(self, player_id):
+        self.player_id = player_id
+        # Here we assume that you already have a loaded dictionary of player_stats.
+        # For example, you might load it from the DB when the player logs in.
+        self.player_stats = self.load_player_stats()
+        # Also open a connection to the DB
+        self.db = sqlite3.connect(DB_NAME)
+        self.db.row_factory = sqlite3.Row
+
+    def load_player_stats(self):
+        # This is a stub. In a real game you would query the DB and load data.
+        # For example, your player_stats might look like this:
+        return {
+            "Buildings": {
+                "levels": {"Castle": 1, "Village House": 1, "Church": 1, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 1},
+                "ongoing_builds": {"Farm": None, "Lumber Mill": None, "Mines": None, "Quarry": None, "Castle": None, "Church": None, "Village House": None},
+                "assigned_workers": {"Farm": 0, "Lumber Mill": 0, "Mines": 0, "Quarry": 0}
+            },
+            "Units": {
+                "levels": {"Citizen": 1, "Soldier": 1, "Calvary": 1, "Archer": 1},
+                "count": {"Citizen": 10, "Soldier": 0, "Calvary": 0, "Archer": 0},
+                "queued_builds": {"Citizen": 0, "Soldier": 0, "Calvary": 0, "Archer": 0},
+                "ongoing_builds": {"Citizen": None, "Soldier": None, "Calvary": None, "Archer": None},
+                "ongoing_upgrades": {"Citizen": None, "Soldier": None, "Calvary": None, "Archer": None}
+            },
+            "Resources": {
+                "money": 1000,
+                "stone": 100,
+                "iron": 50,
+                "wood": 100,
+                "hay": 0,
+                "gold": 0,
+                "diamond": 0
+            }
+        }
+
+    def check_if_player_has_enough_resources(self, resources_dict):
+        # resources_dict is something like {"money": 100, "stone": 10, ...}
+        for resource, needed in resources_dict.items():
+            if self.player_stats["Resources"].get(resource, 0) < needed:
+                return False
+        return True
+
+    def purchase_unit(self, unit_type):
+        # Validate unit type exists in our config.
+        if unit_type not in game_config["Units"]:
+            return "Not a valid unit type"
+        
+        # Check that the building required to produce the unit is built.
+        building_source = game_config["Units"][unit_type]["building_source"]
+        if self.player_stats["Buildings"]["levels"].get(building_source, 0) == 0:
+            return f"{building_source} must be built first"
+        
+        # Check that the unit itself has been unlocked (level > 0).
+        unit_level = self.player_stats["Units"]["levels"].get(unit_type, 0)
+        if unit_level == 0:
+            return "Unit level is 0, please unlock by upgrading in Smithy"
+        
+        # For Citizen, make sure the village capacity is not exceeded.
+        if unit_type == "Citizen":
+            current_producing = 1 if self.player_stats["Units"]["ongoing_builds"].get(unit_type) is not None else 0
+            in_queue = self.player_stats["Units"]["queued_builds"].get(unit_type, 0)
+            current_count = self.player_stats["Units"]["count"].get(unit_type, 0)
+            village_house_level = self.player_stats["Buildings"]["levels"].get("Village House", 0)
+            if current_producing + in_queue + current_count >= village_house_level * 5:
+                return "Please Upgrade Village House"
+        
+        # Calculate unit cost (apply cost multiplier depending on the unit level).
+        unit_cost = copy.deepcopy(game_config["Units"][unit_type]["cost"])
+        for resource, cost in unit_cost.items():
+            unit_cost[resource] = cost * (upgrade_multiplier ** (unit_level - 1))
+        
+        # Check if enough resources are available.
+        if not self.check_if_player_has_enough_resources(unit_cost):
+            return "Not Enough Resources"
+        
+        # Deduct resources.
+        for resource, cost in unit_cost.items():
+            self.player_stats["Resources"][resource] -= cost
+        
+        # For a unit build, the production queue row uses production_type "unit_production"
+        # and the entity is built as "<production_building>.<unit_type>" (e.g., "Stables.Calvary").
+        # In unit production you only assign one worker per task.
+        entity = building_source + '.' + unit_type
+        
+        # Insert a new row in the production_queue table.
+        cur = self.db.cursor()
+        cur.execute("""
+            INSERT INTO production_queue (player_id, production_type, entity, number_of_workers, progress, status)
+            VALUES (?, 'unit_production', ?, 1, 0.0, 'in_progress')
+        """, (self.player_id, entity))
+        self.db.commit()
+        
+        # Update the in-memory queue counter.
+        self.player_stats["Units"]["queued_builds"][unit_type] += 1
+        return "Success"
+    
+    def remove_unit_from_queue(self, unit_type):
+        if unit_type not in game_config["Units"]:
+            return "Not a valid unit type"
+
+        queued = self.player_stats["Units"]["queued_builds"].get(unit_type, 0)
+        ongoing = self.player_stats["Units"]["ongoing_builds"].get(unit_type)
+        if queued == 0 and ongoing is None:
+            return "No units in queue"
+        
+        cur = self.db.cursor()
+        # For unit production there is only one worker per queue row.
+        if queued > 0:
+            # Remove one queued item (we assume a row with progress==0 means not yet started).
+            cur.execute("""
+                DELETE FROM production_queue
+                WHERE player_id = ? AND production_type = 'unit_production'
+                  AND entity = ? AND progress = 0
+                LIMIT 1
+            """, (self.player_id, game_config["Units"][unit_type]["building_source"] + '.' + unit_type))
+            self.player_stats["Units"]["queued_builds"][unit_type] -= 1
+        elif ongoing is not None:
+            # If a production is in progress, cancel it (set to cancelled).
+            cur.execute("""
+                UPDATE production_queue
+                SET progress = 0, status = 'cancelled'
+                WHERE player_id = ? AND production_type = 'unit_production'
+                  AND entity = ?
+                LIMIT 1
+            """, (self.player_id, game_config["Units"][unit_type]["building_source"] + '.' + unit_type))
+            self.player_stats["Units"]["ongoing_builds"][unit_type] = None
+
+        # Refund the unit cost.
+        unit_level = self.player_stats["Units"]["levels"].get(unit_type, 0)
+        unit_cost = copy.deepcopy(game_config["Units"][unit_type]["cost"])
+        for resource, cost in unit_cost.items():
+            unit_cost[resource] = cost * (upgrade_multiplier ** (unit_level - 1))
+            self.player_stats["Resources"][resource] += unit_cost[resource]
+        self.db.commit()
+        return "Success"
+    
+    def purchase_building(self, building_type):
+        # First check for an available worker.
+        if self.number_of_available_workers() <= 0:
+            return "Not Enough Workers available"
+        
+        if building_type not in game_config["Buildings"]:
+            return "Not a valid building type"
+        
+        current_level = self.player_stats["Buildings"]["levels"].get(building_type, 0)
+        if current_level == game_config["Buildings"][building_type]["max"]:
+            return "Max Level Reached"
+        
+        if self.player_stats["Buildings"]["ongoing_builds"].get(building_type) is not None:
+            return "Already Upgrading"
+        
+        # Check whether overall number of buildings meets the castle limit.
+        ongoing_building_upgrades = sum(1 for val in self.player_stats["Buildings"]["ongoing_builds"].values() if val is not None)
+        number_of_buildings = sum(self.player_stats["Buildings"]["levels"].values())
+        if building_type != "Castle" and number_of_buildings + ongoing_building_upgrades >= self.player_stats["Buildings"]["levels"].get("Castle", 0) * 5:
+            return "Not Enough Castle Level"
+        
+        # Calculate building cost. (Multiply cost by cost multiplier raised to current_level.)
+        building_cost = copy.deepcopy(game_config["Buildings"][building_type]["cost"])
+        for resource, cost in building_cost.items():
+            building_cost[resource] = cost * (upgrade_multiplier ** current_level)
+        
+        if not self.check_if_player_has_enough_resources(building_cost):
+            return "Not Enough Resources"
+        
+        # Deduct building cost.
+        for resource, cost in building_cost.items():
+            self.player_stats["Resources"][resource] -= cost
+        
+        # Insert a construction task in the production_queue.
+        cur = self.db.cursor()
+        cur.execute("""
+            INSERT INTO production_queue (player_id, production_type, entity, number_of_workers, progress, status)
+            VALUES (?, 'construction', ?, 1, 0.0, 'in_progress')
+        """, (self.player_id, building_type))
+        self.db.commit()
+        
+        # Mark the building as “in progress” in your in‐memory stats.
+        self.player_stats["Buildings"]["ongoing_builds"][building_type] = 0.0
+        return "Success"
+    
+    def upgrade_unit(self, unit_type):
+        # Require that the Smithy is built.
+        if self.player_stats["Buildings"]["levels"].get("Smithy", 0) == 0:
+            return "Smithy must be built first"
+        
+        # Check none of the unit upgrades are already in progress.
+        for ut, prog in self.player_stats["Units"]["ongoing_upgrades"].items():
+            if prog is not None:
+                return "Already Upgrading"
+        
+        if unit_type not in game_config["Units"]:
+            return "Not a valid unit type"
+        
+        if self.player_stats["Units"]["levels"].get(unit_type, 0) == game_config["Units"][unit_type]["max"]:
+            return "Max Level Reached"
+        
+        # Calculate upgrade (research) cost.
+        unit_cost = copy.deepcopy(game_config["Units"][unit_type]["upgrade_cost"])
+        unit_level = self.player_stats["Units"]["levels"].get(unit_type, 0)
+        for resource, cost in unit_cost.items():
+            unit_cost[resource] = cost * (upgrade_multiplier ** unit_level)
+        
+        if not self.check_if_player_has_enough_resources(unit_cost):
+            return "Not Enough Resources"
+        
+        # Deduct the cost.
+        for resource, cost in unit_cost.items():
+            self.player_stats["Resources"][resource] -= cost
+        
+        # Insert an upgrade (research) task into the production_queue.
+        cur = self.db.cursor()
+        cur.execute("""
+            INSERT INTO production_queue (player_id, production_type, entity, number_of_workers, progress, status)
+            VALUES (?, 'unit_research', ?, 1, 0.0, 'in_progress')
+        """, (self.player_id, unit_type))
+        self.db.commit()
+        
+        self.player_stats["Units"]["ongoing_upgrades"][unit_type] = 0.0
+        return "Success"
+    
+    def number_of_available_workers(self):
+        # Calculate available citizens after subtracting those already assigned.
+        resource_collectors = (
+            self.player_stats["Buildings"]["assigned_workers"].get("Farm", 0) +
+            self.player_stats["Buildings"]["assigned_workers"].get("Quarry", 0) +
+            self.player_stats["Buildings"]["assigned_workers"].get("Lumber Mill", 0) +
+            self.player_stats["Buildings"]["assigned_workers"].get("Mines", 0)
+        )
+        construction_workers = sum(1 for val in self.player_stats["Buildings"]["ongoing_builds"].values() if val is not None)
+        return self.player_stats["Units"]["count"].get("Citizen", 0) - resource_collectors - construction_workers
+
+    def add_worker(self, building_type):
+        # Must be one of the resource-producing buildings.
+        if building_type not in ["Lumber Mill", "Mines", "Quarry", "Farm"]:
+            return "not a valid building type"
+        if self.player_stats["Buildings"]["levels"].get(building_type, 0) == 0:
+            return "building not built"
+        if self.number_of_available_workers() <= 0:
+            return "no available workers"
+        
+        # Update in-memory stats.
+        self.player_stats["Buildings"]["assigned_workers"][building_type] += 1
+        
+        # Also update the corresponding production_queue row.
+        cur = self.db.cursor()
+        cur.execute("""
+            UPDATE production_queue
+            SET number_of_workers = number_of_workers + 1
+            WHERE player_id = ? AND production_type = 'resource' AND entity = ?
+        """, (self.player_id, building_type))
+        self.db.commit()
+        return "Success"
+    
+    def remove_worker(self, building_type):
+        # Must be one of the resource-producing buildings.
+        if building_type not in ["Lumber Mill", "Mines", "Quarry", "Farm"]:
+            return "not a valid building type"
+        if self.player_stats["Buildings"]["assigned_workers"].get(building_type, 0) <= 0:
+            return "no workers to remove"
+        
+        self.player_stats["Buildings"]["assigned_workers"][building_type] -= 1
+        
+        cur = self.db.cursor()
+        # Update the worker count in the resource production record.
+        cur.execute("""
+            UPDATE production_queue
+            SET number_of_workers = number_of_workers - 1
+            WHERE player_id = ? AND production_type = 'resource' AND entity = ?
+        """, (self.player_id, building_type))
+        
+        # For production types that are NOT research/construction, if the new number_of_workers is 0 then delete the row.
+        cur.execute("""
+            DELETE FROM production_queue
+            WHERE player_id = ? 
+              AND production_type NOT IN ('construction', 'unit_research') 
+              AND entity = ?
+              AND number_of_workers <= 0
+        """, (self.player_id, building_type))
+        self.db.commit()
+        return "Success"
+
+    def trade_possible(self, resources_cost):
+        """
+        Check if the player has enough resources for the trade cost.
+        """
+        for resource, amount in resources_cost.items():
+            if self.player_stats["Resources"].get(resource, 0) < amount:
+                return False
+        return True
+
+    def make_trade(self, resources_cost, resources_earned):
+        """
+        Directly perform a trade (e.g., with the merchant).
+        Subtracts resources_cost (after checking if trade is possible and non‐negative)
+        and adds resources_earned.
+        """
+        if not self.trade_possible(resources_cost):
+            print("Not enough resources to make trade")
+            return "not enough resources to make trade"
+        
+        # Ensure no negative values.
+        for resource, value in resources_cost.items():
+            if value < 0:
+                msg = "resources_cost had a negative value: " + str(resources_cost)
+                print(msg)
+                return msg
+        for resource, value in resources_earned.items():
+            if value < 0:
+                msg = "resources_earned had a negative value: " + str(resources_earned)
+                print(msg)
+                return msg
+
+        # Deduct cost from player's resources.
+        for resource, cost in resources_cost.items():
+            self.player_stats["Resources"][resource] = self.player_stats["Resources"].get(resource, 0) - cost
+
+        # Add earned resources.
+        for resource, gain in resources_earned.items():
+            self.player_stats["Resources"][resource] = self.player_stats["Resources"].get(resource, 0) + gain
+
+        return "Success"
+
+    def add_trade_offer(self, resources_cost, resources_earned):
+        """
+        Post a new trade offer and lock the cost resources.
+        The offer is saved into the DB (as JSON text for the resource dictionaries).
+        A player can only post as many offers as his Market level.
+        """
+        # Check that none of the values are negative.
+        for resource, value in resources_cost.items():
+            if value < 0:
+                msg = "resources_cost had a negative value: " + str(resources_cost)
+                print(msg)
+                return msg
+        for resource, value in resources_earned.items():
+            if value < 0:
+                msg = "resources_earned had a negative value: " + str(resources_earned)
+                print(msg)
+                return msg
+
+        # Check if the player has built a Market.
+        market_level = self.player_stats["Buildings"]["levels"].get("Market", 0)
+        if market_level == 0:
+            print("Market not built")
+            return "Market not built"
+
+        # Check if the player already has the maximum allowed offers for his Market level.
+        cur = self.db.cursor()
+        cur.execute("SELECT COUNT(*) as count FROM trade_offers WHERE player_id = ?", (self.player_id,))
+        row = cur.fetchone()
+        current_offers = row["count"] if row else 0
+        if current_offers >= market_level:
+            return "Max number of trades reached for Market level"
+
+        # Check if the player has enough resources.
+        if not self.check_if_player_has_enough_resources(resources_cost):
+            msg = "player does not have enough resources: " + str(resources_cost)
+            print(msg)
+            return msg
+
+        # Lock (subtract) the cost resources from the player.
+        for resource, cost in resources_cost.items():
+            self.player_stats["Resources"][resource] = self.player_stats["Resources"].get(resource, 0) - cost
+
+        # Insert the new trade offer into the DB.
+        cur.execute("""
+            INSERT INTO trade_offers (player_id, resources_cost, resources_earned)
+            VALUES (?, ?, ?)
+        """, (self.player_id, json.dumps(resources_cost), json.dumps(resources_earned)))
+        self.db.commit()
+
+        return "Success"
+
+    def remove_trade_offer(self, offer_id):
+        """
+        Cancel an existing trade offer (by its DB id) and refund the locked resources.
+        This function checks that the offer belongs to the player.
+        """
+        cur = self.db.cursor()
+        cur.execute("SELECT * FROM trade_offers WHERE id = ? AND player_id = ?", (offer_id, self.player_id))
+        row = cur.fetchone()
+        if not row:
+            print("Trade offer not found")
+            return "Trade not found"
+
+        # Refund the locked cost resources back to the player.
+        resources_cost = json.loads(row["resources_cost"])
+        for resource, cost in resources_cost.items():
+            self.player_stats["Resources"][resource] = self.player_stats["Resources"].get(resource, 0) + cost
+
+        # Remove the trade offer from the DB.
+        cur.execute("DELETE FROM trade_offers WHERE id = ? AND player_id = ?", (offer_id, self.player_id))
+        self.db.commit()
+
+        return "Success"
+
+    def accept_offer(self, offer_id, other_player=None):
+        """
+        Accept a trade offer.
+        If other_player is provided (i.e. someone is buying this offer) then check that the
+        other player can pay the required resources (the offer’s trade price). In that case,
+        subtract the price from the buyer and add the locked offer cost.
+        Otherwise, if no other_player is provided, assume a self trade with the merchant –
+        simply credit the earned resources to the offer maker.
+        Finally, in all cases add the 'resources_earned' to the offer maker and delete the offer.
+        """
+        cur = self.db.cursor()
+        cur.execute("SELECT * FROM trade_offers WHERE id = ?", (offer_id,))
+        row = cur.fetchone()
+        if not row:
+            print("Trade offer not found")
+            return "Trade offer not found"
+
+        # If no other_player is specified, then the offer must belong to self.
+        if other_player is None and row["player_id"] != self.player_id:
+            return "Trade offer not owned by player"
+
+        resources_cost = json.loads(row["resources_cost"])
+        resources_earned = json.loads(row["resources_earned"])
+
+        # If another player is accepting the offer, check and process his transaction.
+        if other_player:
+            if not other_player.trade_possible(resources_earned):
+                print("not enough resources to make trade")
+                return "not enough resources to make trade"
+            # Grant the offer cost (i.e. what the offer maker is giving) to the accepting player,
+            # and remove the cost of the trade (the price) from him.
+            for resource, amount in resources_cost.items():
+                other_player.player_stats["Resources"][resource] = other_player.player_stats["Resources"].get(resource, 0) + amount
+            for resource, amount in resources_earned.items():
+                other_player.player_stats["Resources"][resource] = other_player.player_stats["Resources"].get(resource, 0) - amount
+
+        # In any case, credit the offer maker the resources he requested.
+        # (Note: the offer maker had already locked away the cost when posting the offer.)
+        for resource, amount in resources_earned.items():
+            self.player_stats["Resources"][resource] = self.player_stats["Resources"].get(resource, 0) + amount
+
+        # Remove the trade offer from the database.
+        cur.execute("DELETE FROM trade_offers WHERE id = ?", (offer_id,))
+        self.db.commit()
+
+        return "Success"
+
+
+
+
 def get_config_value_from_string(game_config, object_string):
     """
     object string example
@@ -275,8 +725,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS production_queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             player_id INTEGER,
-            production_type TEXT,      -- 'building' or 'unit' or 'resource' or 'research'
-            entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Soldier') or resource (e.g., 'money')
+            production_type TEXT,      -- 'contruction' or 'unit' or 'resource' or 'research'
+            entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks.Soldier' or 'Stables.Calvery') or resource (e.g., 'hay')
             number_of_workers INTEGER, -- number of workers assigned to the task
             start_time TIMESTAMP DEFAULT (datetime('now')),
             duration REAL,             -- expected duration (in seconds, or hours) needed to complete
@@ -288,7 +738,6 @@ def init_db():
     
     con.commit()
     con.close()
-
 
 
 
@@ -425,7 +874,6 @@ def validate_session(player_id, session_auth):
         if datetime.datetime.now() < expires_at:
             return row[0]
     return None
-
 
 
 def get_player_data(player_id, speed=3.5):
@@ -789,7 +1237,7 @@ def update_buildings(player_id, hours_passed, con):
         SELECT *
           FROM production_queue 
          WHERE player_id = ? 
-           AND production_type = 'building'
+           AND production_type = 'construction'
          ORDER BY start_time
     """, (player_id,)).fetchall()
 
@@ -949,6 +1397,63 @@ def update_resources(player_id, hours_passed, con):
     # No expected timestamps are returned from resource update.
     return
 
+def update_quests(self):
+    """
+    Checks each quest configuration. In our quest config each quest contains:
+        • func: a condition expressed (for example) as "Resources['diamond'] >= 5".
+        • reward: a string with one or more entries like "Resources.money = 1000" separated by '&'.
+    If the quest (which is not already completed) evaluates to True, the reward is applied and
+    the quest is marked complete (both in self.player_stats["Quests"] and—if desired—in the DB).
+    """
+    # Build an evaluation environment with keys for Resources, Units, and Buildings.
+    # Note: We use the dictionaries from the player_stats.
+    env = {
+        "Resources": self.player_stats["Resources"],
+        # For units, we assume that it is the count that matters (for quest conditions)
+        "Units": self.player_stats["Units"]["count"],
+        "Buildings": self.player_stats["Buildings"]["levels"],
+    }
+    
+    completed_quests = []
+    for quest in quests_config:
+        qid = quest["id"]
+        # Check if the quest is already marked complete in player_stats.
+        if self.player_stats["Quests"].get(qid, False):
+            continue  # already completed
+        # Evaluate the quest condition.
+        try:
+            # The func string should be written so that, for example, Resources['diamond'] >= 5.
+            if eval(quest["func"], {}, env):
+                # Quest is complete. Mark as complete.
+                self.player_stats["Quests"][qid] = True
+                completed_quests.append(qid)
+                
+                # Now parse and apply the reward.
+                # The reward string uses ampersand (&) to separate multiple rewards.
+                reward_entries = quest["reward"].split("&")
+                for entry in reward_entries:
+                    entry = entry.strip()  # e.g. "Resources.money = 1000"
+                    if "=" not in entry:
+                        continue
+                    left, right = entry.split("=", 1)
+                    left = left.strip()
+                    right = right.strip()
+                    # In our config rewards we expect the left side to be of the form "Resources.<resource_name>"
+                    if left.startswith("Resources."):
+                        resource_name = left[len("Resources."):]
+                        try:
+                            amount = float(right)
+                        except ValueError:
+                            amount = 0
+                        self.player_stats["Resources"][resource_name] = \
+                            self.player_stats["Resources"].get(resource_name, 0) + amount
+                        print("Quest", qid, "completed: Awarded", amount, resource_name)
+                    else:
+                        print("Reward parse warning: unknown key in:", left)
+        except Exception as e:
+            print("Error evaluating quest", qid, "condition:", e)
+    return completed_quests
+
 def update_progress(player_id):
     """
     Example update_progress routine that calls update_units (as well as other update functions).
@@ -976,6 +1481,7 @@ def update_progress(player_id):
     update_resources(player_id, hours_passed, con)
     update_units(player_id, hours_passed, con)
     update_buildings(player_id, hours_passed, con)
+    update_quests(player_id, con)
 
     # Update the player's last_update time.
     cur.execute("UPDATE players SET last_update = ? WHERE player_id = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), player_id))
