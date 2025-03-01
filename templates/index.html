@@ -22,7 +22,7 @@
             width: 200pt; /* Match the width with the slider */
             padding: 0;
         }
-        #game-container {
+        .game-container {
             position: relative;
             width: 1000px;
             height: 1000px;
@@ -81,24 +81,7 @@
 
     
     
-    #game-container {
-        position: relative;
-        width: 1000px;
-        height: 1000px;
-        background-size: cover;
-    }
-    .building {
-        position: absolute;
-    }
-
-    
-    <!-- <div id="game-container" style="background-image: url('{{ url_for('static', filename=render.main_image) }}');">
-        {% for building in render.buildings %}
-            <img class="building" src="{{ url_for('static', filename=building.path) }}" 
-                 style="left: {{ building.x }}px; top: {{ building.y }}px; transform: scale({{ building.scale }});">
-        {% endfor %}
-    </div> -->
-
+ 
 
 </body>
 </html>

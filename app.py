@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, Blueprint
-from player import Player, quests, global_trades,game_config
+#from player import Player, quests, global_trades,game_config
+from app.db_utils import game_config, GameAPI
 import os
 import json
 SPEED = 3.5
@@ -9,7 +10,7 @@ app = Flask(__name__, static_url_path=extra_url +'/static')
 empire_game_bp = Blueprint('empire_game', __name__, url_prefix=extra_url)
 app.secret_key = 'your_secret_key'  # Replace with a real secret key
 # Dictionary to store players by name
-players = {}
+game_api = GameAPI()
 
 
 map_config = {
@@ -89,43 +90,46 @@ def home_redirect():
 
 @empire_game_bp.route('/', methods=['GET', 'POST'])
 def index():
-    global SPEED
-    # Load existing players from saved session
-    if "progress.json" in os.listdir():
-        with open("progress.json") as f:
-            jsonL = json.load(f)
-            for player in jsonL["progress"]:
-                playerObj = Player(load_config=player)
-                players[playerObj.player_stats["Name"]] = playerObj
+
+    players = game_api.get_all_players()
+    id_to_players = {player[0]: player[1] for player in players}
+    players_to_id = {player[1]: player[0] for player in players}
+
 
     if request.method == 'POST':
         player_name = request.form.get('player_name')
-        if player_name:
-            if player_name not in players:
-                players[player_name] = Player(player_name)
-            session['current_player'] = player_name
-            return redirect(url_for('empire_game.dashboard'))
         
-        new_speed = SPEED#request.form.get('speed')
-        #new_speed = SPEED
-        if new_speed:
-            SPEED = int(new_speed)
-            # You might want to add some logic to update anything dependent on SPEED here
-            #return redirect(url_for('index'))
+        if player_name: #means its a login
+            password = "password"# request.form.get('password')
+            
+            if player_name not in list(players_to_id.keys()):
+                player_id = game_api.add_new_player(player_name, password)
+            else:
+                player_id = players_to_id[player_name]
+
+            session_oath = game_api.create_session(player_id, password)
+            
+
+            session['current_player'] = player_name
+            session['current_player_id'] = player_id
+            session['session_oath'] = session_oath
+            return redirect(url_for('empire_game.dashboard'))
+
 
     
 
-    
+    # map_data = {
+    #     "main_image": "map.jpg",
+    #     "players": [
+    #         {"path": "castle1.png", "x": 10, "y": 20,"scale":.7},
+    #         {"path": "Quarry3.png", "x": 915, "y": 15,"scale":.3},
+    #         # ... more buildings
+    #     ]
+    # }
+    SPEED = game_config["game_speed_and_multiplier"]["global_speed"]
 
-    map_data = {
-        "main_image": "map.jpg",
-        "players": [
-            {"path": "castle1.png", "x": 10, "y": 20,"scale":.7},
-            {"path": "Quarry3.png", "x": 915, "y": 15,"scale":.3},
-            # ... more buildings
-        ]
-    }
-    return render_template('index.html', current_players=list(players.keys()), current_speed = SPEED,render=map_data)
+
+    return render_template('index.html', current_players=list(players_to_id.keys()), current_speed = SPEED)#,render=map_data)
 
 @empire_game_bp.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
@@ -279,31 +283,31 @@ def dashboard():
 
 # Additional routes for specific actions like adding/removing miners, managing farms, etc.
 
-def periodic_task():
-    for player_ in players:
-        players[player_].update(SPEED)
-    save_progress()
+# def periodic_task():
+#     for player_ in players:
+#         players[player_].update(SPEED)
+#     save_progress()
 
-def save_progress():
-    jsonFile = []
-    for player in players:
-        jsonFile.append(players[player].export_player_values())
+# def save_progress():
+#     jsonFile = []
+#     for player in players:
+#         jsonFile.append(players[player].export_player_values())
     
-    if len(jsonFile) > 0:
-        with open("progress.json", "w") as f:
-            json.dump({'progress':jsonFile}, f)
+#     if len(jsonFile) > 0:
+#         with open("progress.json", "w") as f:
+#             json.dump({'progress':jsonFile}, f)
     
-    #randomly backup every 1/100 chance using random
-    import random
-    if random.randint(0,100) == 0:
-        with open("progress_backup.json", "w") as f:
-            json.dump({'progress':jsonFile}, f)
+#     #randomly backup every 1/100 chance using random
+#     import random
+#     if random.randint(0,100) == 0:
+#         with open("progress_backup.json", "w") as f:
+#             json.dump({'progress':jsonFile}, f)
 
-from apscheduler.schedulers.background import BackgroundScheduler
-import atexit
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=periodic_task, trigger="interval", seconds=10)
-scheduler.start()
+# from apscheduler.schedulers.background import BackgroundScheduler
+# import atexit
+# scheduler = BackgroundScheduler()
+# scheduler.add_job(func=periodic_task, trigger="interval", seconds=10)
+# scheduler.start()
 
 
 if __name__ == '__main__':
