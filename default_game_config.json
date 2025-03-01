@@ -8,7 +8,7 @@
                 "wood": 10
             },
             "hourly_cost": {
-                "money": 50
+                "money": -50
                 },
             "max_level": 6,
             "hours_to_build": 4,
@@ -23,7 +23,7 @@
                 "stone": 5
             },
             "hourly_cost": {
-                "money": 20
+                "money": -20
             },
             "max_level": 10,
             "hours_to_build": 3,
@@ -37,7 +37,7 @@
                 "wood": 30
             },
             "hourly_cost": {
-                "money": 20
+                "money": -20
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -53,7 +53,7 @@
                 "stone": 50
             },
             "hourly_cost": {
-                "money": 50
+                "money": -50
             },
             "max_level": 1,
             "hours_to_build": 24,
@@ -68,7 +68,7 @@
                 "stone": 50
             },
             "hourly_cost": {
-                "money": 50
+                "money": -50
             },
             "max_level": 1,
             "hours_to_build": 24,
@@ -83,7 +83,7 @@
                 "stone": 50
             },
             "hourly_cost": {
-                "money": 50
+                "money": -50
             },
             "max_level": 1,
             "hours_to_build": 24,
@@ -97,7 +97,8 @@
                 "wood": 20
             },
             "hourly_cost": {
-                "money": 20
+                "money": -20,
+                "hay": -1
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -112,7 +113,8 @@
                 "hay": 20
             },
             "hourly_cost": {
-                "money": 20
+                "money": -20,
+                "wood": -1
             },  
             "max_level": 3,
             "hours_to_build": 6,
@@ -127,7 +129,8 @@
                 "hay": 20
             },
             "hourly_cost": {
-                "money": 20
+                "money": -20,
+                "stone": -1
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -142,7 +145,8 @@
                 "wood": 25
             },
             "hourly_cost": {
-                "money": 20
+                "money": -20,
+                "iron": -1
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -157,7 +161,7 @@
                 "iron": 10
             },
             "hourly_cost": {
-                "money": 20
+                "money": -20
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -171,7 +175,7 @@
                 "iron": 100
             },
             "hourly_cost": {
-                "money": 20
+                "money": -20
             },
             "max_level": 3,
             "hours_to_build": 12,
@@ -186,7 +190,7 @@
                 "wood": 30
             },
             "hourly_cost": {
-                "money": 20
+                "money": -20
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -201,7 +205,7 @@
                 "stone": 50
             },
             "hourly_cost": {
-                "money": 200
+                "money": -200
             },
             "max_level": 1,
             "hours_to_build": 48,
@@ -223,7 +227,7 @@
         }
     },
     "Units": {
-        "Citizen": {
+        "Village House.Citizen": {
             "description": "A citizen to work in your village or turn into a soldier",
             "cost": {
                 "money": 100,
@@ -245,7 +249,7 @@
             "start_amount": 3
     
         },
-        "Soldier": {
+        "Barracks.Soldier": {
             "description": "A soldier to defend your village",
             "cost": {
                 "money": 200,
@@ -270,7 +274,7 @@
             "max_level": 3,
             "start_amount": 0
         },
-        "Calvary": {
+        "Stables.Calvary": {
             "description": "A calvary to defend your village",
             "cost": {
                 "money": 300,
@@ -296,7 +300,7 @@
             "max_level": 3,
             "start_amount": 0
         },
-        "Archer": {
+        "Barracks.Archer": {
             "description": "An archer to defend your village",
             "cost": {
                 "money": 250,
@@ -322,7 +326,7 @@
             "max_level": 3,
             "start_amount": 0
         },
-        "Duke": {
+        "Keep.Duke": {
             "description": "A duke to conquer other villages.",
             "cost": {
                 "money": 10000,
@@ -346,7 +350,7 @@
             "max_level": 1,
             "start_amount": 0
         },
-        "Boat": {
+        "Dock.Boat": {
             "description": "A boat used to cary resources and soldiers to other lands.",
             "cost": {
                 "money": 1000,
@@ -422,12 +426,12 @@
         {"id":3, "text": "Amass 100 iron", "reward": "Resources.money = 500", "func": "Resources.iron >= 100"},
         {"id":4, "text": "Accumulate 25 gold", "reward": "Resources.money = 500", "func": "Resources.gold >= 25"},
         {"id":5, "text": "Stockpile 100 stone", "reward": "Resources.money = 250", "func": "Resources.stone >= 100"},
-        {"id":6, "text": "Train 10 soldiers", "reward": "Resources.money = 300", "func": "Units.Soldier >= 10"},
+        {"id":6, "text": "Train 10 soldiers", "reward": "Resources.money = 300", "func": "Units.Barracks.Soldier >= 10"},
         {"id":7, "text": "Have 8 buildings", "reward": "Resources.money = 400", "func": "Buildings.Castle >= 8"},
         {"id":8, "text": "Have 15 buildings", "reward": "Resources.money = 800", "func": "Buildings.Castle >= 15"},
         {"id":9, "text": "Harvest 100 wood", "reward": "Resources.money = 200", "func": "Resources.wood >= 100"},
-        {"id":10, "text": "Forge 2 boats", "reward": "Resources.money = 600", "func": "Units.Boat >= 2"},
-        {"id":11, "text": "Conscript 5 cavalry", "reward": "Resources.money = 350", "func": "Units.Calvary >= 5"},
+        {"id":10, "text": "Forge 2 boats", "reward": "Resources.money = 600", "func": "Units.Dock.Boat >= 2"},
+        {"id":11, "text": "Conscript 5 cavalry", "reward": "Resources.money = 350", "func": "Units.Stables.Calvary >= 5"},
         {"id":12, "text": "Construct a grand church", "reward": "Resources.money = 800", "func": "Buildings.Church >= 1"}
     ],
 

@@ -135,12 +135,18 @@ def index():
 def dashboard():
     
     player_name = session.get('current_player')
-    if not player_name or player_name not in players:
+    player_id = session.get('current_player_id')
+
+    validation = game_api.validate_session(session.get('current_player_id'), session.get('session_oath'))
+    if validation is None:
         return redirect(url_for('empire_game.index'))
 
-    player = players[player_name]
 
-    player.update(SPEED)
+    player = session.get('current_player')
+    game_api.update_progress(player_id)
+
+
+    get_player_data = game_api.get_player_data(player_name)
 
     updated_quests = []
     #enumrate to get index and quest

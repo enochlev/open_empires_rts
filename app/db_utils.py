@@ -19,34 +19,119 @@ class PlayerAPI:
         self.db = sqlite3.connect(DB_NAME)
         self.db.row_factory = sqlite3.Row
 
+
     def load_player_stats(self):
-        # This is a stub. In a real game you would query the DB and load data.
-        # For example, your player_stats might look like this:
-        return {
-            "Buildings": {
-                "levels": {"Castle": 1, "Village House": 1, "Church": 1, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 1},
-                "assigned_workers": {"Castle": 0, "Village House": 0, "Church": 0, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 0},
-                "ongoing_builds": {"building": "Castle","progress":0.4344, "number_of_workers":3, "level":2},
-                "queued_builds": [{"building": "Castle","level":3}, {"building": "Castle","level":4}],
-            },
-            "Units": {
-                "levels": {"Village House.Citizen": 1, "Barracks.Soldier": 1, "Stables.Calvary": 1, "Barracks.Archer": 1},
-                "count": {"Village House.Citizen": 10, "Barracks.Soldier": 0, "Stables.Calvary": 0, "Barracks.Archer": 0},
-                "ongoing_recruitments": [{"unit": "Barracks.Soldier", "progress": 0.5}, {"unit": "Stables.Calvery", "progress": 0.2}],
-                "queued_recruitments": [{"unit": "Barracks.Soldier"}, {"unit": "Barracks.Soldier"}, {"unit": "Stables.Calvary"}],
-                "ongoing_upgrades": {"unit": "Barracks.Soldier", "progress": 0.3},
-                
-            },
-            "Resources": {
-                "money": 1000,
-                "stone": 100,
-                "iron": 50,
-                "wood": 100,
-                "hay": 0,
-                "gold": 0,
-                "diamond": 0
+        stats = {}
+
+        # ----------------------
+        # Initialize Buildings
+        stats["Buildings"] = {}
+        stats["Buildings"]["levels"] = {}
+        stats["Buildings"]["assigned_workers"] = {}
+        stats["Buildings"]["ongoing_builds"] = {}
+        stats["Buildings"]["queued_builds"] = {}
+        for building, conf in game_config["Buildings"].items():
+            default_level = conf.get("default_level", 0)
+            # Ensure there is at least a level 1 Castle:
+            if building == "Castle" and default_level == 0:
+                default_level = 1
+            stats["Buildings"]["levels"][building] = default_level
+
+            # For worker-assigned buildings we could default to zero.
+            stats["Buildings"]["assigned_workers"][building] = 0
+
+            # No build in progress initially.
+            stats["Buildings"]["ongoing_builds"][building] = None
+
+            # Queued tasks start with zero.
+            stats["Buildings"]["queued_builds"][building] = 0
+
+        # ----------------------
+        # Initialize Units
+        stats["Units"] = {}
+        stats["Units"]["levels"] = {}
+        stats["Units"]["count"] = {}
+        stats["Units"]["ongoing_builds"] = {}
+        stats["Units"]["queued_builds"] = {}
+        stats["Units"]["ongoing_upgrades"] = {}
+        stats["Units"]["queued_upgrades"] = {}
+        for unit, conf in game_config["Units"].items():
+            default_level = conf.get("default_level", 0)
+            if unit == "Citizen" and default_level == 0:
+                default_level = 1
+            stats["Units"]["levels"][unit] = default_level
+
+            default_count = conf.get("default_count", 0)
+            if unit == "Citizen" and default_count == 0:
+                default_count = 10
+            stats["Units"]["count"][unit] = default_count
+
+            # No unit production or upgrade in progress at player creation.
+            stats["Units"]["ongoing_builds"][unit] = None
+            stats["Units"]["queued_builds"][unit] = 0
+            stats["Units"]["ongoing_upgrades"][unit] = None
+            stats["Units"]["queued_upgrades"][unit] = 0
+
+        # ----------------------
+        # Initialize Resources
+        stats["Resources"] = {}
+        for resource, conf in game_config["Resources"].items():
+            stats["Resources"][resource] = conf.get("default", 0)
+
+        # ----------------------
+        # Load Quests from DB
+        # Here we assume that game_config may contain a list of quest templates.
+        # The quests table stores for each player:
+        #    quest_index (that corresponds to the quest id from game_config)
+        #    and a completed flag.
+        stats["Quests"] = []
+        cur = self.db.cursor()
+        cur.execute("SELECT quest_index, completed, timestamp FROM quests WHERE player_id = ?", (self.player_id,))
+        quest_rows = cur.fetchall()
+        # Assuming game_config["Quests"] is a list of quest templates (dictionaries)
+        quest_templates = game_config.get("Quests", [])
+        for row in quest_rows:
+            # Find the matching quest template if it exists.
+            matching = next((q for q in quest_templates if q["id"] == row["quest_index"]), None)
+            if matching:
+                quest = matching.copy()
+            else:
+                # Use a minimal structure if no matching template is found.
+                quest = {"id": row["quest_index"]}
+            quest["completed"] = bool(row["completed"])
+            quest["timestamp"] = row["timestamp"]
+            stats["Quests"].append(quest)
+
+        # ----------------------
+        # Load Trades from DB
+        # In this example we load all trade offers.
+        # Depending on your game logic you might want to adjust the SQL (for example, showing only trades not created by the current player).
+        stats["Trades"] = []
+        cur.execute("SELECT id, player_id, resources_cost, resources_earned, timestamp FROM trade_offers")
+        trade_rows = cur.fetchall()
+        for row in trade_rows:
+            try:
+                resources_cost = json.loads(row["resources_cost"])
+            except Exception:
+                resources_cost = {}
+            try:
+                resources_earned = json.loads(row["resources_earned"])
+            except Exception:
+                resources_earned = {}
+
+            trade = {
+                "id": row["id"],
+                "resources_cost": resources_cost,
+                "resources_earned": resources_earned,
+                # In the game_config sample the key 'source_player' was expected.
+                # Here we simply return the player_id of the trade creator.
+                "source_player": row["player_id"],
+                "timestamp": row["timestamp"]
             }
-        }
+            stats["Trades"].append(trade)
+
+        return stats
+
 
     def check_if_player_has_enough_resources(self, resources_dict):
         # resources_dict is something like {"money": 100, "stone": 10, ...}
@@ -786,6 +871,8 @@ class GameAPI:
                 groups[prod_building][unit_type] = []
             groups[prod_building][unit_type].append(task)
         
+        if groups == {}:
+            return []
         # Fetch the player’s buildings (to get levels for production buildings and Smithy).
         buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
         building_levels = {b["building_type"]: b["level"] for b in buildings}
@@ -1028,6 +1115,8 @@ class GameAPI:
         bs = game_config["game_speed_and_multiplier"]["building_speed"]
         us = game_config["game_speed_and_multiplier"]["unit_speed"]
         rs = game_config["game_speed_and_multiplier"]["resource_speed"]
+        bubm = game_config["game_speed_and_multiplier"]["building_upgrade_boost_multiplier"]
+        uubm = game_config["game_speed_and_multiplier"]["unit_upgrade_boost_multiplier"]
 
         # Process building income/expenses.
         for b in player_buildings:
@@ -1036,7 +1125,7 @@ class GameAPI:
             if b_type in game_config["Buildings"]:
                 hourly_cost = game_config["Buildings"][b_type]["hourly_cost"]
                 for res, cost in hourly_cost.items():
-                    delta = cost * lvl * hours_passed * gs * bs * church_multiplier
+                    delta = cost * hours_passed * gs * bs * church_multiplier * bubm ** (lvl - 1)
                     resources_added[res] -= delta
             else:
                 print("Warning: No building config for", b_type)
@@ -1050,7 +1139,7 @@ class GameAPI:
                 hourly_cost = game_config["Units"][unit_type]["hourly_cost"]
                 for res, cost in hourly_cost.items():
                     # Note: using exponent (lvl - 1) as in your old code.
-                    delta = (cost ** (lvl - 1)) * count * hours_passed * gs * us * church_multiplier
+                    delta = cost * count * hours_passed * gs * us * church_multiplier * uubm ** (lvl - 1)
                     resources_added[res] -= delta
             else:
                 print("Warning: No unit config for", unit_type)
@@ -1064,7 +1153,6 @@ class GameAPI:
             AND status = 'in_progress'
         """, (player_id,)).fetchall()
         # For resource production, we “never” remove the queue item.
-        prod_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_boost_multiplier"]
         for item in resource_queue:
             entity = item["entity"]  # e.g., "Farm", "Lumber Mill", etc.
             workers = item["number_of_workers"]
@@ -1078,7 +1166,7 @@ class GameAPI:
             if (bld_level is None) or (bld_level == 0):
                 continue
 
-            rate = (prod_multiplier ** (bld_level - 1)) * workers * hours_passed * gs * rs * church_multiplier
+            rate = workers * hours_passed * gs * rs * church_multiplier * bubm ** (bld_level - 1)
             new_prog = curr_prog + rate
             whole_units = int(new_prog)
             remainder = new_prog - whole_units
@@ -1106,15 +1194,11 @@ class GameAPI:
         # Update the player's resources.
         for res, delta in resources_added.items():
             # Safe to use string formatting for column names because your resource names are known.
-            cur.execute("UPDATE resources SET {} = {} + ? WHERE player_id = ?".format(res, res), (delta, player_id))
+            pass#cur.execute("UPDATE resources SET {} = {} + ? WHERE player_id = ?".format(res, res), (delta, player_id))
 
-        # Update player's last_update timestamp.
-        cur.execute("UPDATE players SET last_update = ? WHERE player_id = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), player_id))
+        return []
 
-        # No expected timestamps are returned from resource update.
-        return
-
-    def update_quests(self):
+    def update_quests(self, player_id, con):
         """
         Checks each quest configuration. In our quest config each quest contains:
             • func: a condition expressed (for example) as "Resources['diamond'] >= 5".
@@ -1190,15 +1274,12 @@ class GameAPI:
         now = datetime.datetime.now()
         dt_seconds = (now - last_update).total_seconds()
         hours_passed = dt_seconds / 3600.0
-
-        # Update units (production and research)
-        unit_timestamps = update_units(player_id, hours_passed, con)
         
         # ... you could call update_buildings(player_id, hours_passed, con) and update_resources(player_id, hours_passed, con) here
-        update_resources(player_id, hours_passed, con)
-        update_units(player_id, hours_passed, con)
-        update_buildings(player_id, hours_passed, con)
-        update_quests(player_id, con)
+        resources_ts = self.update_resources(player_id, hours_passed, con)
+        units_ts = self.update_units(player_id, hours_passed, con)
+        building_ts = self.update_buildings(player_id, hours_passed, con)
+        quests_ts = self.update_quests(player_id, con)
 
         # Update the player's last_update time.
         cur.execute("UPDATE players SET last_update = ? WHERE player_id = ?", (now.strftime("%Y-%m-%d %H:%M:%S"), player_id))
@@ -1206,7 +1287,7 @@ class GameAPI:
         con.commit()
         con.close()
         
-        return unit_timestamps
+        return resources_ts + units_ts + building_ts + quests_ts
 
 
     def create_dataframes():
@@ -1272,8 +1353,8 @@ def game_config_check(game_config):
         for potential_bad_resrouce in game_config["Buildings"][building]["hourly_cost"].keys():
             assert potential_bad_resrouce in all_resources, f"Incorrect resource {potential_bad_resrouce} in {building} hourly_costs"
             #create a warning if costs is positive
-            if game_config["Buildings"][building]["hourly_cost"][potential_bad_resrouce] < 0:
-                print(f"WARNING: {building} has negative hourly cost for {potential_bad_resrouce}. Players will make money hourly after building this. Make sure this is intended")
+            if game_config["Buildings"][building]["hourly_cost"][potential_bad_resrouce] > 0:
+                print(f"WARNING: {building} has a postive hourly cost for {potential_bad_resrouce}. Players will loose money hourly after building this (typically building produce money). Make sure this is intended")
 
 
     for unit in game_config["Units"]:
@@ -1325,7 +1406,7 @@ def game_config_check(game_config):
                 potential_bad_item = potential_bad_item.split(".")[1]
                 assert potential_bad_item in all_resources, f"Incorrect resource {potential_bad_item} in {quest} requirements"
             elif "Units" in potential_bad_item:
-                potential_bad_item = potential_bad_item.split(".")[1]
+                potential_bad_item = potential_bad_item.split(".",1)[1]
                 assert potential_bad_item in all_units, f"Incorrect unit {potential_bad_item} in {quest} requirements"
 
             #elfit it must only contain digits and >=< signs
