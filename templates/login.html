@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Empire Game Login</title>
+    <style>
+        /* Basic styling for the tabs and forms */
+        body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; }
+        .tab-container { max-width: 500px; margin: 50px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .tab-header { display: flex; }
+        .tab-header div {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            background: #eee;
+            border-bottom: 1px solid #ccc;
+        }
+        .tab-header .active { background: #fff; font-weight: bold; border-bottom: 2px solid #5cb85c; }
+        .tab-content { padding: 20px; }
+        form { display: none; }
+        form.active { display: block; }
+        label { display: block; margin: 10px 0 5px; color: #555; }
+        input[type="text"], input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #5cb85c;
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 16px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+        button:hover { background-color: #4cae4c; }
+    </style>
+</head>
+<body>
+<div class="tab-container">
+    <div class="tab-header">
+        <div id="tab-login" class="active" onclick="showTab('login')">Login</div>
+        <div id="tab-signup" onclick="showTab('signup')">Sign Up</div>
+        <div id="tab-reset" onclick="showTab('reset')">Reset Password</div>
+    </div>
+    <div class="tab-content">
+        <!-- Login Form: identifier (username or email) + password -->
+        <form id="form-login" class="active" method="POST">
+            <input type="hidden" name="action" value="login">
+            <label for="identifier">Username or Email</label>
+            <input type="text" name="identifier" id="identifier" required>
+            <label for="login_password">Password</label>
+            <input type="password" name="password" id="login_password" required>
+            <button type="submit">Login</button>
+        </form>
+        
+        <!-- Sign Up Form: requires username, email, and password -->
+        <form id="form-signup" method="POST">
+            <input type="hidden" name="action" value="signup">
+            <label for="signup_username">Username</label>
+            <input type="text" name="username" id="signup_username" required>
+            <label for="signup_email">Email</label>
+            <input type="email" name="email" id="signup_email" required>
+            <label for="signup_password">Password</label>
+            <input type="password" name="password" id="signup_password" required>
+            <button type="submit">Sign Up</button>
+        </form>
+        
+        <!-- Reset Password Request Form: requires email only -->
+        <form id="form-reset" method="POST">
+            <input type="hidden" name="action" value="reset_request">
+            <label for="reset_email">Email</label>
+            <input type="email" name="email" id="reset_email" required>
+            <button type="submit">Send Reset Link</button>
+        </form>
+    </div>
+</div>
+
+<script>
+   function showTab(tabName) {
+       // Remove active classes from tab headers and forms.
+       document.getElementById("tab-login").classList.remove("active");
+       document.getElementById("tab-signup").classList.remove("active");
+       document.getElementById("tab-reset").classList.remove("active");
+       document.getElementById("form-login").classList.remove("active");
+       document.getElementById("form-signup").classList.remove("active");
+       document.getElementById("form-reset").classList.remove("active");
+       
+       // Add active classes to the selected tab and its form.
+       if (tabName === 'login') {
+           document.getElementById("tab-login").classList.add("active");
+           document.getElementById("form-login").classList.add("active");
+       } else if (tabName === 'signup') {
+           document.getElementById("tab-signup").classList.add("active");
+           document.getElementById("form-signup").classList.add("active");
+       } else if (tabName === 'reset') {
+           document.getElementById("tab-reset").classList.add("active");
+           document.getElementById("form-reset").classList.add("active");
+       }
+   }
+</script>
+</body>
+</html>

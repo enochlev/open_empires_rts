@@ -1,8 +1,17 @@
-from flask import Flask, render_template, request, redirect, url_for, session, Blueprint
+from flask import Flask, render_template, request, redirect, url_for, session, Blueprint, flash
 #from player import Player, quests, global_trades,game_config
 from app.db_utils import game_config, GameAPI, PlayerAPI
 import os
 import json
+import smtplib
+import dotenv
+dotenv.load_dotenv()
+import datetime
+import os
+import base64
+from werkzeug.security import generate_password_hash, check_password_hash
+import time
+
 SPEED = 3.5
 
 extra_url = "/empire-game"
@@ -11,6 +20,50 @@ empire_game_bp = Blueprint('empire_game', __name__, url_prefix=extra_url)
 app.secret_key = 'your_secret_key'  # Replace with a real secret key
 # Dictionary to store players by name
 game_api = GameAPI()
+
+# ---------- Token utilities for password reset ----------
+def generate_reset_token(email):
+    """
+    This example simply base64-encodes the email and current UTC time.
+    For production, use a proper token serializer (like itsdangerous.URLSafeTimedSerializer).
+    """
+    token_data = f"{email}:{datetime.datetime.utcnow()}"
+    token = base64.urlsafe_b64encode(token_data.encode()).decode()
+    return token
+
+def verify_reset_token(token):
+    """
+    Decode the token and return the email if successful.
+    (This simple example does not check expiry.)
+    """
+    try:
+        token_bytes = base64.urlsafe_b64decode(token.encode())
+        token_str = token_bytes.decode()
+        email, _ = token_str.split(":", 1)
+        return email
+    except Exception:
+        return None
+
+    # ---------- Email sending function ----------
+def send_password_reset_email(email, token):
+    from_email = 'enochlev@icloud.com'
+    to_email = email
+    domain_name = 'https://enochlev.com/empire-game'
+
+    smtp_obj = smtplib.SMTP('smtp.mail.me.com', 587)
+    smtp_obj.starttls()
+    smtp_obj.login('enochlev@icloud.com', os.getenv('EMAIL_PASSWORD'))
+
+    message = (f"From: {from_email}\r\nTo: {to_email}\r\n\r\n")
+    message += (f"Subject: Password Reset\n\n"
+                f"Click the link to reset your password: {domain_name}/reset-password/{token}")
+
+    try:
+        smtp_obj.sendmail(from_addr=from_email, to_addrs=to_email, msg=message)
+    except Exception as e:
+        print("Error sending email:", e)
+    finally:
+        smtp_obj.quit()
 
 
 map_config = {
@@ -88,49 +141,117 @@ map_config = {
 def home_redirect():
     return redirect(url_for('empire_game.index'))
 
+
+# ---------- Main route: Login, Sign-Up, and Reset Request ----------
 @empire_game_bp.route('/', methods=['GET', 'POST'])
 def index():
-
-    players = game_api.get_all_players()
-    id_to_players = {player[0]: player[1] for player in players}
-    players_to_id = {player[1]: player[0] for player in players}
-
-
     if request.method == 'POST':
-        player_name = request.form.get('player_name')
+        action = request.form.get('action')
         
-        if player_name: #means its a login
-            password = "password"# request.form.get('password')
+        if action == 'login':
+            # Login: one field (identifier) can be username or email.
+            identifier = request.form.get('identifier')
+            password = request.form.get('password')
+            if not identifier or not password:
+                flash("Please enter both identifier and password.", "error")
+                return redirect(url_for('empire_game.index'))
             
-            if player_name not in list(players_to_id.keys()):
-                player_id = game_api.add_new_player(player_name, password)
-            else:
-                player_id = players_to_id[player_name]
+            # Look up the player by username OR email.
+            row = game_api.verify_valid_new_username_and_email(identifier, identifier)
 
-            session_oath = game_api.create_session(player_id, password)
+            if not row:
+                flash("User not found.", "error")
+                return redirect(url_for('empire_game.index'))
+            player_id = row['player_id']
+            player_name = row['name']
             
-
+            # Here, generate a session token as needed.
+            session_token = game_api.create_session(player_id, password)
             session['current_player'] = player_name
             session['current_player_id'] = player_id
-            session['session_oath'] = session_oath
+            session['session_oath'] = session_token
             game_api.update_progress(player_id)
             return redirect(url_for('empire_game.dashboard'))
+        
+        elif action == 'signup':
+            # Sign Up: requires username, email, and password.
+            username = request.form.get('username')
+            email = request.form.get('email')
+            password = request.form.get('password')
+            if not username or not email or not password:
+                flash("Please fill in all fields for sign up.", "error")
+                return redirect(url_for('empire_game.index'))
+            
+            # Check if the username already exists.
+            row = game_api.verify_valid_new_username_and_email(username, email)
+            
+            if row != None:
+                player_id = row['player_id']
+                stored_email = row['email']
+                stored_name = row['name']
 
+                if stored_email == email:
+                    flash("Email is already in use.", "error")
+                if stored_name == username:
+                    flash("Username is already in use.", "error")
+                
+                #dont return anything, just flash the error
+                return redirect(url_for('empire_game.index'))
 
+            else:
+                # Create a new player.
+                game_api.add_new_player(username, password, email)
+            
+            
+            session_token = game_api.create_session(player_id, password)
+            session['current_player'] = username
+            session['current_player_id'] = player_id
+            session['session_oath'] = session_token
+            game_api.update_progress(player_id)
+            return redirect(url_for('empire_game.dashboard'))
+        
+        elif action == 'reset_request':
+            # Reset Password Request: just need email.
+            reset_email = request.form.get('email')
+            if not reset_email:
+                flash("Please enter your email address.", "error")
+                return redirect(url_for('empire_game.index'))
+            token = generate_reset_token(reset_email)
+            send_password_reset_email(reset_email, token)
+            flash("If the email is registered, a reset link has been sent.", "info")
+            return redirect(url_for('empire_game.index'))
     
+    # GET – render the login page with three tabs.
+    return render_template('login.html')
 
-    # map_data = {
-    #     "main_image": "map.jpg",
-    #     "players": [
-    #         {"path": "castle1.png", "x": 10, "y": 20,"scale":.7},
-    #         {"path": "Quarry3.png", "x": 915, "y": 15,"scale":.3},
-    #         # ... more buildings
-    #     ]
-    # }
-    SPEED = game_config["game_speed_and_multiplier"]["global_speed"]
+# ---------- Reset Password Endpoint ----------
+@empire_game_bp.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    
+    email = verify_reset_token(token)
+    if not email:
+        flash("Invalid or expired token.", "error")
+        return redirect(url_for('empire_game.index'))
+    
+    if request.method == 'POST':
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+        if new_password != confirm_password:
+            flash("Passwords do not match.", "error")
+            return redirect(url_for('empire_game.reset_password', token=token))
+        
+        # Update the password in the DB for the user with this email.
+
+        game_api.reset_password(email, new_password)
+
+        flash("Your password has been reset. Please log in.", "success")
+        return redirect(url_for('empire_game.index'))
+    
+    return render_template('reset_password.html', token=token)
+
+# (Also ensure that you have a route for game_api.dashboard and configure your Flask app for sessions and flash messages.)
 
 
-    return render_template('index.html', current_players=list(players_to_id.keys()), current_speed = SPEED)#,render=map_data)
 
 @empire_game_bp.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():

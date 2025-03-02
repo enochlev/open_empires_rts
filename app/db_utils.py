@@ -235,7 +235,6 @@ class PlayerAPI:
 
         return stats
 
-
     def check_if_player_has_enough_resources(self, resources_dict):
         # resources_dict is something like {"money": 100, "stone": 10, ...}
         for resource, needed in resources_dict.items():
@@ -667,6 +666,7 @@ class GameAPI:
                 player_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE,
                 password_hash TEXT,
+                email TEXT,
                 last_update TIMESTAMP DEFAULT (datetime('now'))
             );
         """)
@@ -795,8 +795,17 @@ class GameAPI:
         rows = cur.fetchall()
         con.close()
         return rows
+    
+    def verify_valid_new_username_and_email(self, name, email):
+        con = sqlite3.connect(DB_NAME)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+        cur.execute("SELECT * FROM players WHERE name = ? OR email = ?", (name, email))
+        row = cur.fetchone()
+        con.close()
+        return row
 
-    def add_new_player(self, name, plain_password):
+    def add_new_player(self, name, plain_password, email):
         con = sqlite3.connect(DB_NAME)
         cur = con.cursor()
         
@@ -812,16 +821,11 @@ class GameAPI:
             #return player_id
         
         cur.execute("""
-            INSERT OR IGNORE INTO players (name, password_hash, last_update)
-            VALUES (?, ?, ?)
-        """, (name, password_hash, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            INSERT OR IGNORE INTO players (name, password_hash, email, last_update)
+            VALUES (?, ?, ?, ?)
+        """, (name, password_hash, email, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         con.commit()
 
-        if False:
-            #querry all hashed passwords
-            out = cur.execute("SELECT * FROM players")
-            for row in out:
-                print(row)
 
         # Get the player_id for further reference.
         cur.execute("SELECT player_id FROM players WHERE name = ?", (name,))
@@ -878,6 +882,15 @@ class GameAPI:
         con.commit()
         con.close()
         return player_id
+
+    def reset_password(self, email, new_password):
+        con = sqlite3.connect(DB_NAME)
+        cur = con.cursor()
+        password_hash = generate_password_hash(new_password)
+        del new_password
+        cur.execute("UPDATE players SET password_hash = ? WHERE email = ?", (password_hash, email))
+        con.commit()
+        con.close()
 
     def create_session(self, player_id, plain_password):
 
