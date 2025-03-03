@@ -97,8 +97,7 @@
                 "Wood": 20
             },
             "hourly_cost": {
-                "Money": -20,
-                "Wheat": -1
+                "Money": -20
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -113,8 +112,7 @@
                 "Wheat": 20
             },
             "hourly_cost": {
-                "Money": -20,
-                "Wood": -1
+                "Money": -20
             },  
             "max_level": 3,
             "hours_to_build": 6,
@@ -129,8 +127,7 @@
                 "Wheat": 20
             },
             "hourly_cost": {
-                "Money": -20,
-                "Stone": -1
+                "Money": -20
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -145,8 +142,7 @@
                 "Wood": 25
             },
             "hourly_cost": {
-                "Money": -20,
-                "Iron": -1
+                "Money": -20
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -437,7 +433,7 @@
 
     "game_speed_and_multiplier":
     {
-        "global_speed": 1.0,
+        "global_speed": 100.0,
         "building_speed": 1.0, 
         "unit_speed": 1.0,
         "resource_speed": 1.0,

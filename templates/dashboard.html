@@ -50,6 +50,8 @@
   {% endfor %}
 
   <!-- JavaScript to trigger the fade out -->
+
+
   <script src="{{ url_for('static', filename='js/global.js') }}"></script>
 
     <a href="{{ url_for('empire_game.index') }}" style="display: inline-block; padding: 10px 20px; margin: 10px; background-color: #f0f0f0; color: black; border: 1px solid #ddd; text-decoration: none; border-radius: 4px;">Back to Home</a>
@@ -107,8 +109,9 @@
 
     <!-- Ongoing Building Upgrade Progress -->
     {% for building, details in game_config.Buildings.items() %}
-      {% set ongoing = player_data.Buildings.ongoing_builds %}
-      {% if ongoing and ongoing.building == building %}
+    {% set ongoing_builds = player_data.Buildings.ongoing_builds %}
+    {% for ongoing in ongoing_builds %}
+      {% if ongoing.building == building %}
         <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
           <div class="progress-bar" style="background-color: green; width: {{ ongoing.progress * 100 }}%; height: 100%; position: absolute;"></div>
           <div style="position: absolute; width: 100%; text-align: center; color: white;">
@@ -118,6 +121,7 @@
         <br>
       {% endif %}
     {% endfor %}
+  {% endfor %}
 
     <!-- Units Section – Citizens (Village_House/Citizen)
     <h3>👨‍🌾 Citizens: {{ player_data.Units.count["Village_House/Citizen"] }}</h3>
@@ -339,42 +343,6 @@
       {% endfor %}
     {% endif %}
 
-    <!-- Production Buildings (Lumber Mill, Quarry, Mines, Farm) -->
-    {% if player_data.Buildings.levels["Lumber Mill"] > 0 %}
-    <h2>🌲 Lumber Mill: Level {{ player_data.Buildings.levels["Lumber Mill"] }}</h2>
-    <h5>{{ game_config.Buildings["Lumber Mill"].description }}</h5>
-    <p>🪵 Wood: {{ "%.0f"|format(player_data.Resources.Wood) }}</p>
-
-    {# Filter the ongoing_resources_collection for Lumber Mill tasks #}
-    {% set lumber_tasks = player_data.Buildings.ongoing_resources_collection 
-        | selectattr("building", "equalto", "Lumber Mill") | list %}
-    <p>🪓 Woodcutters: {{ lumber_tasks|length > 0 
-            and lumber_tasks|sum(attribute='number_of_workers') or 0 }}</p>
-
-    {# Loop over each ongoing task for Lumber Mill (if any) #}
-    {% if lumber_tasks|length > 0 %}
-        {% for task in lumber_tasks %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-            <div class="progress-bar" style="background-color: green; width: {{ task.progress * 100 }}%; height: 100%; position: absolute;"></div>
-            <div style="position: absolute; width: 100%; text-align: center; color: white;">
-            {{ "%.0f"|format(task.progress * 100) }}%
-            </div>
-        </div>
-        {% endfor %}
-    {% else %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-        <div class="progress-bar" style="background-color: green; width: 0%; height: 100%; position: absolute;"></div>
-        <div style="position: absolute; width: 100%; text-align: center; color: white;">0%</div>
-        </div>
-    {% endif %}
-
-    <form method="POST">
-        <input type="hidden" name="building_type" value="Lumber Mill">
-        <button name="add_worker" type="submit">Add Woodcutter</button>
-        <button name="remove_worker" type="submit">Remove Woodcutter</button>
-    </form>
-    {% endif %}
-
 
 
     <!-- Lumber Mill -->
@@ -553,26 +521,15 @@
     <!-- Quests Section -->
     <h2>📜 Quests</h2>
     <div>
-      {% for quest in quests %}
-        <div style="border: 1px solid; margin: 5px; padding: 5px; width: 400pt; background-color: {{ quest.completed and 'green' or 'white' }};">
-          <p>{{ quest.description }}</p>
-          <p>Reward:
-            {% for resource, amount in quest.reward.items() %}
-              {{ resource }}: {{ amount }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </p>
-          <p>Status: {{ quest.completed and "Completed" or "In Progress" }}</p>
-        </div>
-      {% endfor %}
+      {% for quest in player_data.Quests %}
+      <div class="quest-box" style="background-color: {{ quest.completed and 'green' or 'white' }};">
+        <p class="quest-text">{{ quest.text }}</p>
+        <p class="quest-reward" data-reward="{{ quest.reward }}">Reward:</p>
+        <p class="quest-status">Status: {{ quest.completed and "Completed" or "In Progress" }}</p>
+      </div>
+    {% endfor %}
     </div>
 
-    <!-- Game-rendered image and buildings -->
-    <div id="game-container" style="background-image: url('{{ url_for('static', filename=render_data.main_image) }}');">
-      {% for building in render_data.buildings %}
-        <img class="building" src="{{ url_for('static', filename=building.path) }}" 
-             style="left: {{ building.x }}px; top: {{ building.y }}px; transform: scale({{ building.scale }});">
-      {% endfor %}
-    </div>
 
   </body>
 </html>

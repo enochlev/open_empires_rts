@@ -3,7 +3,7 @@ import datetime
 import json
 import uuid
 import random
-
+import pandas as pd
 game_config = {}
 with open("default_game_config.json") as f:
     game_config = json.load(f)
@@ -24,8 +24,8 @@ class PlayerAPI:
             "Buildings": {
                 "levels": {"Castle": 1, "Village_House": 1, "Church": 1, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 1},
                 "ongoing_resources_collection: [{"building": "Farm", "progress": 0.5, "number_of_workers": 3}, {"building": "Mines", "progress": 0.2, "number_of_workers": 2}],
-                "ongoing_builds": {"building": "Castle","progress":0.4344, "number_of_workers":3, "level":2},
-                "queued_builds": [{"building": "Castle","level":3}, {"building": "Castle","level":4}],
+                "ongoing_builds": [{"building": "Castle","progress":0.4344, "number_of_workers":1, "level":2}],
+                #"queued_builds": [{"building": "Castle","level":3}, {"building": "Castle","level":4}],
             },
             "Units": {
                 "levels": {"Village_House/Citizen": 1, "Barracks/Soldier": 1, "Stables/Calvary": 1, "Barracks/Archer": 1},
@@ -102,8 +102,7 @@ class PlayerAPI:
         stats["Buildings"] = {}
         stats["Buildings"]["levels"] = {}
         stats["Buildings"]["ongoing_resources_collection"] = []
-        stats["Buildings"]["ongoing_builds"] = {}
-        stats["Buildings"]["queued_builds"] = []
+        stats["Buildings"]["ongoing_builds"] = []
         for building, conf in game_config["Buildings"].items():
 
             stats["Buildings"]["levels"][building] = player_buildings.get(building, 0)
@@ -118,19 +117,19 @@ class PlayerAPI:
             #search if there are ongoing builds
             for queue in player_queues:
                 if queue["production_type"] == "construction" and queue["entity"] == building:
-                    stats["Buildings"]["ongoing_builds"] = {"building": building, "progress": queue["progress"], "number_of_workers": queue["number_of_workers"], "level": building_level + 1}
+                    stats["Buildings"]["ongoing_builds"] += [{"building": building, "progress": queue["progress"], "number_of_workers": queue["number_of_workers"], "level": building_level + 1}]
                     building_level += 1
-                    break
             
             #search if there are queued builds
-            for queue in player_queues:
-                if queue["production_type"] == "construction" and queue["entity"] == building:
-                    stats["Buildings"]["queued_builds"] += [{"building": building, "level": building_level + 1, "order": queue['id']}]
-                    building_level += 1
+            #now queues for buildings... must have worker avalible
+            # for queue in player_queues:
+            #     if queue["production_type"] == "construction" and queue["entity"] == building:
+            #         stats["Buildings"]["queued_builds"] += [{"building": building, "level": building_level + 1, "order": queue['id']}]
+            #         building_level += 1
 
         #sort queued_builds by order then remove it
-        stats["Buildings"]["queued_builds"] = sorted(stats["Buildings"]["queued_builds"], key=lambda x: x["order"])
-        stats["Buildings"]["queued_builds"] = [x.pop('order') for x in stats["Buildings"]["queued_builds"]]
+        #stats["Buildings"]["queued_builds"] = sorted(stats["Buildings"]["queued_builds"], key=lambda x: x["order"])
+        #stats["Buildings"]["queued_builds"] = [x.pop('order') for x in stats["Buildings"]["queued_builds"]]
 
 
         # ----------------------
@@ -364,19 +363,23 @@ class PlayerAPI:
         
         current_level = self.player_stats["Buildings"]["levels"].get(building_type, 0)
 
-        # check if its the current building being upgrading
-        is_currently_upgrading = 1 if building_type in self.player_stats["Buildings"]["ongoing_builds"].keys() else 0
 
-        # check how much time it appears in the queue   
-        in_queue = sum(1 for val in self.player_stats["Buildings"]["queued_builds"] if building_type == val.get("building"))
+        is_currently_upgrading = sum(1 for val in self.player_stats["Buildings"]["ongoing_builds"] if building_type == val.get("building"))
+        if is_currently_upgrading > 0:
+            return "Already Upgrading, wait for it to finish."
+        # # check if its the current building being upgrading
+        # is_currently_upgrading = 1 if building_type in self.player_stats["Buildings"]["ongoing_builds"].keys() else 0
+
+        # # check how much time it appears in the queue   
+        # in_queue = sum(1 for val in self.player_stats["Buildings"]["queued_builds"] if building_type == val.get("building"))
         
 
-        if current_level + is_currently_upgrading + in_queue >= game_config["Buildings"][building_type]["max_level"]:
+        if game_config["Buildings"][building_type]["max_level"] <= current_level:# + is_currently_upgrading + in_queue
             return "Max Level Reached or Upgrading"
 
         
         # Check whether overall number of buildings meets the castle limit.
-        ongoing_building_upgrades = sum(1 for val in self.player_stats["Buildings"]["ongoing_builds"].values() if val is not None)
+        ongoing_building_upgrades = len(self.player_stats["Buildings"]["ongoing_builds"])
         number_of_buildings = sum(self.player_stats["Buildings"]["levels"].values())
         if building_type != "Castle" and number_of_buildings + ongoing_building_upgrades >= self.player_stats["Buildings"]["levels"].get("Castle", 0) * 5:
             return "Not Enough Castle Level"
@@ -385,7 +388,7 @@ class PlayerAPI:
         building_cost = game_config["Buildings"][building_type]["cost"].copy()
         upgrade_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_cost_multiplier"]
         for resource, cost in building_cost.items():
-            building_cost[resource] = cost * (upgrade_multiplier ** (current_level + is_currently_upgrading + in_queue))
+            building_cost[resource] = cost * (upgrade_multiplier ** (current_level))# + is_currently_upgrading + in_queue))
         
         has_enough_resources = self.check_if_player_has_enough_resources(building_cost)
         if has_enough_resources != True:
@@ -457,6 +460,9 @@ class PlayerAPI:
         for worker in self.player_stats["Units"]["ongoing_recruitments"]:
             assigned_workers += worker["number_of_workers"]
 
+        for worker in self.player_stats["Buildings"]["ongoing_builds"]:
+            assigned_workers += worker["number_of_workers"]
+
         #number of avalible workers is Village_House.level * 5 - assigned_workers - construction_workers
         village_house_level = self.player_stats["Buildings"]["levels"].get("Village_House", 0)
 
@@ -472,15 +478,27 @@ class PlayerAPI:
             return "no available workers"
         
         # Update in-memory stats.
-        self.player_stats["Buildings"]["assigned_workers"][building_type] += 1
-        
+        #if building_type not in self.player_stats["Buildings"]["assigned_workers"]:
+        #check if there is already an ongoing resource collection for the building, if so add to number_of_workers, else create a new isntance
         # Also update the corresponding production_queue row.
         cur = self.db.cursor()
-        cur.execute("""
-            UPDATE production_queue
-            SET number_of_workers = number_of_workers + 1
-            WHERE player_id = ? AND production_type = 'resource' AND entity = ?
-        """, (self.player_id, building_type))
+
+        #first check if there is already of ongoing resource collection for that building
+        row = cur.execute("SELECT * FROM production_queue WHERE player_id = ? AND production_type = 'resource' AND entity = ?", (self.player_id, building_type)).fetchone()
+        if row:
+            cur.execute("""
+                UPDATE production_queue
+                SET number_of_workers = number_of_workers + 1
+                WHERE player_id = ? AND production_type = 'resource' AND entity = ?
+            """, (self.player_id, building_type))
+        else:
+            #this should happen only once, as progress will stay 0 until units are assinged to it
+            cur.execute("""
+                INSERT INTO production_queue (player_id, production_type, entity, number_of_workers, progress, status)
+                VALUES (?, 'resource', ?, 1, 0.0, 'in_progress')
+            """, (self.player_id, building_type))
+
+
         self.db.commit()
         return "Success"
     
@@ -488,10 +506,14 @@ class PlayerAPI:
         # Must be one of the resource-producing buildings.
         if building_type not in ["Lumber Mill", "Mines", "Quarry", "Farm"]:
             return "not a valid building type"
-        if self.player_stats["Buildings"]["assigned_workers"].get(building_type, 0) <= 0:
+        if self.player_stats["Buildings"]["levels"].get(building_type, 0) == 0:
+            return "building not built"
+        
+        worker_queus = [x for x in self.player_stats["Buildings"]["ongoing_resources_collection"] if x["building"] == building_type]
+        
+        if len(worker_queus) == 0 or worker_queus[0]["number_of_workers"] == 0:
             return "no workers to remove"
         
-        self.player_stats["Buildings"]["assigned_workers"][building_type] -= 1
         
         cur = self.db.cursor()
         # Update the worker count in the resource production record.
@@ -505,10 +527,14 @@ class PlayerAPI:
         cur.execute("""
             DELETE FROM production_queue
             WHERE player_id = ? 
-              AND production_type NOT IN ('construction', 'unit_research') 
+              AND production_type NOT IN ('construction', 'unit_research', 'resource')
               AND entity = ?
               AND number_of_workers <= 0
         """, (self.player_id, building_type))
+
+        if False:
+            df = pd.read_sql_query("SELECT * FROM production_queue WHERE player_id = ?", self.db, params=(self.player_id,))
+
         self.db.commit()
         return "Success"
 
@@ -805,11 +831,12 @@ class GameAPI:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_id INTEGER,
                 production_type TEXT,      -- 'contruction' or 'unit' or 'resource' or 'research'
-                entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks/Soldier' or 'Stables.Calvery') or resource (e.g., 'Wheat')
+                entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks/Soldier' or 'Stables.Calvery') or resource (e.g., 'Farm')
                 number_of_workers INTEGER, -- number of workers assigned to the task
                 start_time TIMESTAMP DEFAULT (datetime('now')),
                 duration REAL,             -- expected duration (in seconds, or hours) needed to complete
                 progress REAL DEFAULT 0,     -- a float tracking current progress between 0 and 1
+                rate REAL,                 -- rate of progress per second
                 status TEXT DEFAULT 'in_progress',  -- could be in_progress, or queued
                 FOREIGN KEY(player_id) REFERENCES players(player_id)
             );
@@ -1194,9 +1221,7 @@ class GameAPI:
         for item in bld_queue:
             bld_type = item["entity"]
             curr_level = building_levels.get(bld_type, 0)
-            if curr_level == 0:
-                # Skip if the building is not yet built.
-                continue
+
             if bld_type not in game_config["Buildings"]:
                 print("Warning: No building config for", bld_type)
                 continue
@@ -1212,12 +1237,19 @@ class GameAPI:
             prog = item["progress"]
             new_prog = prog + hours_passed * rate
             if new_prog >= 1:
+                #if new building add it
+                if curr_level == 0:
+                    cur.execute("""
+                        INSERT INTO buildings (player_id, building_type, level)
+                        VALUES (?, ?, 1)
+                    """, (player_id, bld_type))
+                else:
                 # Complete the building production: increase level.
-                cur.execute("""
-                    UPDATE buildings 
-                    SET level = level + 1 
-                    WHERE player_id = ? AND building_type = ?
-                """, (player_id, bld_type))
+                    cur.execute("""
+                        UPDATE buildings 
+                        SET level = level + 1 
+                        WHERE player_id = ? AND building_type = ?
+                    """, (player_id, bld_type))
                 cur.execute("DELETE FROM production_queue WHERE id = ?", (item["id"],))
                 # (Extra progress could be passed on to next queued production if you wish.)
             else:
@@ -1240,6 +1272,26 @@ class GameAPI:
         • Finally, update the player's last_update timestamp.
         """
         cur = con.cursor()
+        production_buildings = ["Farm", "Lumber Mill", "Quarry", "Mines"]
+
+        rows = cur.execute("SELECT * FROM production_queue WHERE player_id = ?", (player_id,)).fetchall()
+        for building_type in production_buildings:
+            building_in_queue = False
+            for row in rows:
+                if row["entity"] == building_type:
+                    building_in_queue = True
+                    break
+            if not building_in_queue:
+                #if building level is > 0
+                building_level = cur.execute("SELECT level FROM buildings WHERE player_id = ? AND building_type = ?", (player_id, building_type)).fetchone()
+                if building_level:
+                    if building_level["level"] > 0:
+                    # If building not in queue, add it with 0 workers.
+                        cur.execute("""
+                            INSERT INTO production_queue (player_id, production_type, entity, number_of_workers, progress, status)
+                            VALUES (?, 'resource', ?, 0, 0.0, 'in_progress')
+                        """, (player_id, building_type))
+
 
         # Get player's buildings and units.
         player_buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
@@ -1298,6 +1350,10 @@ class GameAPI:
             AND status = 'in_progress'
         """, (player_id,)).fetchall()
         # For resource production, we “never” remove the queue item.
+        #if no workers, or not in queue, make it .5 speed
+        
+
+
         for item in resource_queue:
             entity = item["entity"]  # e.g., "Farm", "Lumber Mill", etc.
             workers = item["number_of_workers"]
@@ -1311,6 +1367,8 @@ class GameAPI:
             if (bld_level is None) or (bld_level == 0):
                 continue
 
+            workers += .5
+
             rate = workers * hours_passed * gs * rs * church_multiplier * bubm ** (bld_level - 1)
             new_prog = curr_prog + rate
             whole_units = int(new_prog)
@@ -1319,7 +1377,7 @@ class GameAPI:
             if entity == "Farm":
                 resources_added["Wheat"] += whole_units
             elif entity == "Lumber Mill":
-                resources_added["wood"] += whole_units
+                resources_added["Wood"] += whole_units
             elif entity == "Quarry":
                 resources_added["Stone"] += whole_units
             elif entity == "Mines":

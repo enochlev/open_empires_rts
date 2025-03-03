@@ -24,3 +24,34 @@ body {
 .flash-message.fade-out {
     opacity: 0;
 }
+
+
+.quest-box {
+    border: 1px solid #ccc;
+    margin: 3px;
+    padding: 4px;
+    width: 400pt;
+    border-radius: 6px;
+  }
+  
+  .quest-text {
+    font-size: 1.1em;
+    margin-bottom: 5px;
+  }
+  
+  .quest-reward {
+    font-size: 0.95em;
+    margin-bottom: 5px;
+  }
+  
+  .quest-status {
+    font-weight: bold;
+  }
+  
+  .reward-item {
+    background-color: #f0f0f0;
+    padding: 2px 4px;
+    margin-right: 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }

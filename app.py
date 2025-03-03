@@ -270,9 +270,9 @@ def dashboard():
 
     player_api = PlayerAPI(player_id) 
 
-
+    game_api.update_progress(player_id)
     player_data = player_api.load_player_stats()
-
+    
 
     message = None
     if request.method == 'POST':
@@ -325,8 +325,9 @@ def dashboard():
                         break
                 players[source_player].accept_offer(trade_index, player)
                 #player.accept_offer(trade_index, players[source_player])
-    
 
+
+        game_api.update_progress(player_id)
         flash(message)
         return redirect(url_for('empire_game.dashboard'))
     
@@ -422,5 +423,5 @@ def dashboard():
 
 if __name__ == '__main__':
     app.register_blueprint(empire_game_bp)
-    app.run(host='0.0.0.0', port=8000, debug=False)
+    app.run(host='0.0.0.0', port=8000, debug=True)
 #https://chat.openai.com/share/c680c458-34b7-4287-b80c-5f3b1b21d50e
