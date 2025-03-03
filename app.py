@@ -167,6 +167,10 @@ def index():
             
             # Here, generate a session token as needed.
             session_token = game_api.create_session(player_id, password)
+            if not session_token:
+                flash("Invalid password.", "error")
+                return redirect(url_for('empire_game.index'))
+
             session['current_player'] = player_name
             session['current_player_id'] = player_id
             session['session_oath'] = session_token
@@ -200,7 +204,7 @@ def index():
 
             else:
                 # Create a new player.
-                game_api.add_new_player(username, password, email)
+                player_id = game_api.add_new_player(username, password, email)
             
             
             session_token = game_api.create_session(player_id, password)
@@ -273,36 +277,33 @@ def dashboard():
     message = None
     if request.method == 'POST':
         if 'purchase_unit' in request.form:
-            if "barracks_unit_type" in request.form:
-                message = player.purchase_unit(request.form.get('barracks_unit_type'))
-            else:
-                message = player.purchase_unit(request.form.get('unit_type'))
+            #if "barracks_unit_type" in request.form:
+            message = player_api.purchase_unit(request.form.get('unit_type'))
         elif 'remove_unit_from_queue' in request.form:
-            message = player.remove_unit_from_queue(request.form.get('unit_type'))
+            message = player_api.remove_unit_from_queue(request.form.get('unit_type'))
         elif 'purchase_building' in request.form:
-            message = player.purchase_building(request.form.get('building_type'))
-
+            message = player_api.purchase_building(request.form.get('building_type'))
         elif 'upgrade_unit' in request.form:
-            message = player.upgrade_unit(request.form.get('unit_type'))
+            message = player_api.upgrade_unit(request.form.get('unit_type'))
         elif 'add_worker' in request.form:
-            message = player.add_worker(request.form.get('building_type'))
+            message = player_api.add_worker(request.form.get('building_type'))
         elif 'remove_worker' in request.form:
-            message = player.remove_worker(request.form.get('building_type'))
+            message = player_api.remove_worker(request.form.get('building_type'))
         elif 'add_trade_offer' in request.form:
             resources_cost = {request.form.get('resources_cost'): int(request.form.get('cost_amount'))}
             resources_earned = {request.form.get('resources_earned'): int(request.form.get('earned_amount'))}
-            message = player.add_trade_offer(resources_cost, resources_earned)
+            message = player_api.add_trade_offer(resources_cost, resources_earned)
         elif 'remove_trade_offer' in request.form:
             trade_index = int(request.form.get('trade_index'))
             
-            trades = get_player_data["Trades"]
+            trades = player_data["Trades"]
             for i in range(len(trades)):
                 if trades[i]["player"] != player_name:
                     trade_index -= 1
                 else:
                     break
 
-            message = player.remove_trade_offer(trade_index)
+            message = player_api.remove_trade_offer(trade_index)
 
 
         elif 'accept_trade_offer' in request.form:
@@ -326,15 +327,13 @@ def dashboard():
                 #player.accept_offer(trade_index, players[source_player])
     
 
-        save_progress()
-        # Redirect to the same route to prevent form resubmission and add/modify message to session
-        session['message'] = message
+        flash(message)
         return redirect(url_for('empire_game.dashboard'))
     
         # Add more POST request handling for other actions like adding/removing citizens, miners, etc.
 
 
-    
+        
     #message = session.pop('message', None)
 
     render_data = {
@@ -390,7 +389,7 @@ def dashboard():
     #             #print(building_map[id])
     #             game_data["buildings"].append(building_map[id]) 
 
-    return render_template('dashboard.html', player_data=player_data, game_config=game_config, message = message, render_data=render_data)
+    return render_template('dashboard.html', player_data=player_data, game_config=game_config, render_data=render_data)
 
 # Additional routes for specific actions like adding/removing miners, managing farms, etc.
 

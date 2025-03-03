@@ -22,35 +22,35 @@ class PlayerAPI:
             "Player Name": "Marcus1233",
             "Player ID": 1,
             "Buildings": {
-                "levels": {"Castle": 1, "Village House": 1, "Church": 1, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 1},
-                "ongoing_resources_collection: [{"building": "Farm", "progress": 0.5, "number_of_workers": 3}, {"building": "Farm", "progress": 0.2, "number_of_workers": 2}],
+                "levels": {"Castle": 1, "Village_House": 1, "Church": 1, "Farm": 1, "Lumber Mill": 1, "Mines": 1, "Quarry": 1, "Smithy": 1},
+                "ongoing_resources_collection: [{"building": "Farm", "progress": 0.5, "number_of_workers": 3}, {"building": "Mines", "progress": 0.2, "number_of_workers": 2}],
                 "ongoing_builds": {"building": "Castle","progress":0.4344, "number_of_workers":3, "level":2},
                 "queued_builds": [{"building": "Castle","level":3}, {"building": "Castle","level":4}],
             },
             "Units": {
-                "levels": {"Village House.Citizen": 1, "Barracks.Soldier": 1, "Stables.Calvary": 1, "Barracks.Archer": 1},
-                "count": {"Village House.Citizen": 10, "Barracks.Soldier": 0, "Stables.Calvary": 0, "Barracks.Archer": 0},
-                "ongoing_recruitments": [{"unit": "Barracks.Soldier", "progress": 0.5}, {"unit": "Stables.Calvery", "progress": 0.2}],
-                "queued_recruitments": [{"unit": "Barracks.Soldier"}, {"unit": "Barracks.Soldier"}, {"unit": "Stables.Calvary"}],
-                "ongoing_upgrades": {"unit": "Barracks.Soldier", "progress": 0.3, "level": 1},
-                "queued_upgrades": [{"unit": "Barracks.Soldier", "level": 2}, {"unit": "Stables.Calvary", "level": 1}],
+                "levels": {"Village_House/Citizen": 1, "Barracks/Soldier": 1, "Stables/Calvary": 1, "Barracks/Archer": 1},
+                "count": {"Village_House/Citizen": 10, "Barracks/Soldier": 0, "Stables/Calvary": 0, "Barracks/Archer": 0},
+                "ongoing_recruitments": [{"unit": "Barracks/Soldier", "progress": 0.5}, {"unit": "Stables.Calvery", "progress": 0.2}],
+                "queued_recruitments": [{"unit": "Barracks/Soldier"}, {"unit": "Barracks/Soldier"}, {"unit": "Stables/Calvary"}],
+                "ongoing_upgrades": {"unit": "Barracks/Soldier", "progress": 0.3, "level": 1},
+                "queued_upgrades": [{"unit": "Barracks/Soldier", "level": 2}, {"unit": "Stables/Calvary", "level": 1}],
             },
             "Resources": {
-                "money": 1000,
-                "stone": 100,
-                "iron": 50,
+                "Money": 1000,
+                "Stone": 100,
+                "Iron": 50,
                 "wood": 100,
-                "hay": 0,
-                "gold": 0,
-                "diamond": 0
+                "Wheat": 0,
+                "Gold": 0,
+                "Diamond": 0
             },
             "Quests": [
-                {"id": 1, "description": "Build a Castle", "reward": {"money": 100, "stone": 50}, "completed": False},
-                {"id": 2, "description": "Recruit 10 Soldiers", "reward": {"money": 50, "stone": 20}, "completed": False}
+                {"id": 1, "description": "Build a Castle", "reward": {"Money": 100, "Stone": 50}, "completed": False},
+                {"id": 2, "description": "Recruit 10 Soldiers", "reward": {"Money": 50, "Stone": 20}, "completed": False}
             ],
             "Trades":
             [
-                {"id": 1, "resources_cost": {"money": 100, "stone": 50}, "resources_earned": {"wood": 100, "iron": 50}, "source_player": "Marcus1233"},
+                {"id": 1, "resources_cost": {"Money": 100, "Stone": 50}, "resources_earned": {"wood": 100, "Iron": 50}, "source_player": "Marcus1233"},
                 ...#make sure to check all players
             ]
     
@@ -61,7 +61,7 @@ class PlayerAPI:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_id INTEGER,
                 production_type TEXT,      -- 'contruction' or 'unit' or 'resource' or 'research'
-                entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks.Soldier' or 'Stables.Calvery') or resource (e.g., 'hay')
+                entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks/Soldier' or 'Stables.Calvery') or resource (e.g., 'Wheat')
                 number_of_workers INTEGER, -- number of workers assigned to the task
                 start_time TIMESTAMP DEFAULT (datetime('now')),
                 duration REAL,             -- expected duration (in seconds, or hours) needed to complete
@@ -233,13 +233,24 @@ class PlayerAPI:
 
         cur.close()
 
+        self.player_stats = stats
+
         return stats
 
     def check_if_player_has_enough_resources(self, resources_dict):
-        # resources_dict is something like {"money": 100, "stone": 10, ...}
+        # resources_dict is something like {"Money": 100, "Stone": 10, ...}
+        enough = True
+        resources_needed = ""
         for resource, needed in resources_dict.items():
             if self.player_stats["Resources"].get(resource, 0) < needed:
-                return False
+                needed = needed - self.player_stats["Resources"].get(resource, 0)
+                #ceiling int
+                needed = int(needed) + 1 if needed % 1 != 0 else int(needed)
+
+                resources_needed += f"{resource}: {needed}, "
+                enough = False
+        if not enough:
+            return "Not enough resources: " + resources_needed[:-2]
         return True
 
     def purchase_unit(self, unit_type):
@@ -259,36 +270,43 @@ class PlayerAPI:
         
         # For Citizen, make sure the village capacity is not exceeded.
         if unit_type == "Citizen":
+            return "Citizen cannot be purchased, upgrade Village_House to get more"
             current_producing = 1 if self.player_stats["Units"]["ongoing_builds"].get(unit_type) is not None else 0
             in_queue = self.player_stats["Units"]["queued_builds"].get(unit_type, 0)
             current_count = self.player_stats["Units"]["count"].get(unit_type, 0)
-            village_house_level = self.player_stats["Buildings"]["levels"].get("Village House", 0)
+            village_house_level = self.player_stats["Buildings"]["levels"].get("Village_House", 0)
             if current_producing + in_queue + current_count >= village_house_level * 5:
-                return "Please Upgrade Village House"
+                return "Please Upgrade Village_House"
         
         # Calculate unit cost (apply cost multiplier depending on the unit level).
-        unit_cost = copy.deepcopy(game_config["Units"][unit_type]["cost"])
+        unit_cost = game_config["Units"][unit_type]["cost"].copy()
+        upgrade_multiplier = game_config["Units"][unit_type]["upgrade_multiplier"]
+
         for resource, cost in unit_cost.items():
             unit_cost[resource] = cost * (upgrade_multiplier ** (unit_level - 1))
         
         # Check if enough resources are available.
         if not self.check_if_player_has_enough_resources(unit_cost):
             return "Not Enough Resources"
-        
-        # Deduct resources.
-        for resource, cost in unit_cost.items():
-            self.player_stats["Resources"][resource] -= cost
+    
         
         # For a unit build, the production queue row uses production_type "unit_production"
-        # and the entity is built as "<production_building>.<unit_type>" (e.g., "Stables.Calvary").
+        # and the entity is built as "<production_building>.<unit_type>" (e.g., "Stables/Calvary").
         # In unit production you only assign one worker per task.
         entity = building_source + '.' + unit_type
         
         # Insert a new row in the production_queue table.
         cur = self.db.cursor()
+
+        # Deduct resources.
+        for resource, cost in unit_cost.items():
+            #self.player_stats["Resources"][resource] -= cost
+            cur.execute(f"UPDATE resources SET {resource} = {resource} - {cost} WHERE player_id = ?", (self.player_id,))
+
+
         cur.execute("""
             INSERT INTO production_queue (player_id, production_type, entity, number_of_workers, progress, status)
-            VALUES (?, 'unit_production', ?, 1, 0.0, 'in_progress')
+            VALUES (?, 'unit', ?, 1, 0.0, 'in_progress')
         """, (self.player_id, entity))
         self.db.commit()
         
@@ -345,11 +363,17 @@ class PlayerAPI:
             return "Not a valid building type"
         
         current_level = self.player_stats["Buildings"]["levels"].get(building_type, 0)
-        if current_level == game_config["Buildings"][building_type]["max"]:
-            return "Max Level Reached"
+
+        # check if its the current building being upgrading
+        is_currently_upgrading = 1 if building_type in self.player_stats["Buildings"]["ongoing_builds"].keys() else 0
+
+        # check how much time it appears in the queue   
+        in_queue = sum(1 for val in self.player_stats["Buildings"]["queued_builds"] if building_type == val.get("building"))
         
-        if self.player_stats["Buildings"]["ongoing_builds"].get(building_type) is not None:
-            return "Already Upgrading"
+
+        if current_level + is_currently_upgrading + in_queue >= game_config["Buildings"][building_type]["max_level"]:
+            return "Max Level Reached or Upgrading"
+
         
         # Check whether overall number of buildings meets the castle limit.
         ongoing_building_upgrades = sum(1 for val in self.player_stats["Buildings"]["ongoing_builds"].values() if val is not None)
@@ -358,27 +382,30 @@ class PlayerAPI:
             return "Not Enough Castle Level"
         
         # Calculate building cost. (Multiply cost by cost multiplier raised to current_level.)
-        building_cost = copy.deepcopy(game_config["Buildings"][building_type]["cost"])
+        building_cost = game_config["Buildings"][building_type]["cost"].copy()
+        upgrade_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_cost_multiplier"]
         for resource, cost in building_cost.items():
-            building_cost[resource] = cost * (upgrade_multiplier ** current_level)
+            building_cost[resource] = cost * (upgrade_multiplier ** (current_level + is_currently_upgrading + in_queue))
         
-        if not self.check_if_player_has_enough_resources(building_cost):
-            return "Not Enough Resources"
-        
-        # Deduct building cost.
-        for resource, cost in building_cost.items():
-            self.player_stats["Resources"][resource] -= cost
+        has_enough_resources = self.check_if_player_has_enough_resources(building_cost)
+        if has_enough_resources != True:
+            return has_enough_resources
         
         # Insert a construction task in the production_queue.
         cur = self.db.cursor()
+
+        # Deduct building cost.
+        for resource, cost in building_cost.items():
+            #self.player_stats["Resources"][resource] -= cost
+            cur.execute(f"UPDATE resources SET {resource} = {resource} - {cost} WHERE player_id = ?", (self.player_id,))
+
         cur.execute("""
             INSERT INTO production_queue (player_id, production_type, entity, number_of_workers, progress, status)
             VALUES (?, 'construction', ?, 1, 0.0, 'in_progress')
         """, (self.player_id, building_type))
         self.db.commit()
         
-        # Mark the building as “in progress” in your in‐memory stats.
-        self.player_stats["Buildings"]["ongoing_builds"][building_type] = 0.0
+
         return "Success"
     
     def upgrade_unit(self, unit_type):
@@ -398,8 +425,9 @@ class PlayerAPI:
             return "Max Level Reached"
         
         # Calculate upgrade (research) cost.
-        unit_cost = copy.deepcopy(game_config["Units"][unit_type]["upgrade_cost"])
+        unit_cost = game_config["Units"][unit_type]["upgrade_cost"].copy()
         unit_level = self.player_stats["Units"]["levels"].get(unit_type, 0)
+        upgrade_multiplier = game_config["Units"][unit_type]["upgrade_multiplier"]
         for resource, cost in unit_cost.items():
             unit_cost[resource] = cost * (upgrade_multiplier ** unit_level)
         
@@ -423,14 +451,16 @@ class PlayerAPI:
     
     def number_of_available_workers(self):
         # Calculate available citizens after subtracting those already assigned.
-        resource_collectors = (
-            self.player_stats["Buildings"]["assigned_workers"].get("Farm", 0) +
-            self.player_stats["Buildings"]["assigned_workers"].get("Quarry", 0) +
-            self.player_stats["Buildings"]["assigned_workers"].get("Lumber Mill", 0) +
-            self.player_stats["Buildings"]["assigned_workers"].get("Mines", 0)
-        )
-        construction_workers = sum(1 for val in self.player_stats["Buildings"]["ongoing_builds"].values() if val is not None)
-        return self.player_stats["Units"]["count"].get("Citizen", 0) - resource_collectors - construction_workers
+        assigned_workers = 0
+        for worker in self.player_stats["Buildings"]["ongoing_resources_collection"]:
+            assigned_workers += worker["number_of_workers"]
+        for worker in self.player_stats["Units"]["ongoing_recruitments"]:
+            assigned_workers += worker["number_of_workers"]
+
+        #number of avalible workers is Village_House.level * 5 - assigned_workers - construction_workers
+        village_house_level = self.player_stats["Buildings"]["levels"].get("Village_House", 0)
+
+        return (village_house_level * 5) - assigned_workers
 
     def add_worker(self, building_type):
         # Must be one of the resource-producing buildings.
@@ -748,7 +778,7 @@ class GameAPI:
             CREATE TABLE IF NOT EXISTS trade_offers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_id INTEGER,
-                resources_cost TEXT,  -- e.g., {"money": 100, "stone":10} as JSON text
+                resources_cost TEXT,  -- e.g., {"Money": 100, "Stone":10} as JSON text
                 resources_earned TEXT,
                 timestamp TIMESTAMP DEFAULT (datetime('now')),
                 FOREIGN KEY(player_id) REFERENCES players(player_id)
@@ -775,7 +805,7 @@ class GameAPI:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_id INTEGER,
                 production_type TEXT,      -- 'contruction' or 'unit' or 'resource' or 'research'
-                entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks.Soldier' or 'Stables.Calvery') or resource (e.g., 'hay')
+                entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks/Soldier' or 'Stables.Calvery') or resource (e.g., 'Wheat')
                 number_of_workers INTEGER, -- number of workers assigned to the task
                 start_time TIMESTAMP DEFAULT (datetime('now')),
                 duration REAL,             -- expected duration (in seconds, or hours) needed to complete
@@ -945,7 +975,7 @@ class GameAPI:
     def update_unit_production(self, player_id, hours_passed, con):
         """
         Process production_queue entries of type 'unit_production'.
-        In these tasks the entity field is in the format "Building.Unit" (for example "Stables.Calvary").
+        In these tasks the entity field is in the format "Building.Unit" (for example "Stables/Calvary").
         We group tasks by the production building first (so that production is affected by that building’s level)
         and then by unit type.
         
@@ -975,7 +1005,7 @@ class GameAPI:
         # Instead of using defaultdict – we do this manually.
         groups = {}
         for task in prod_tasks:
-            # We expect the entity to be in the form "Building.Unit", e.g., "Stables.Calvary".
+            # We expect the entity to be in the form "Building.Unit", e.g., "Stables/Calvary".
             parts = task["entity"].split('.')
             if len(parts) != 2:
                 print("Invalid entity format in unit production task:", task["entity"])
@@ -1203,7 +1233,7 @@ class GameAPI:
         """
         Update the player's resources. In this step:
         • Buildings and units subtract (or add) resources (using configured hourly_costs).
-        • Production tasks of type "resource"—which represent infinite production (e.g., a Farm producing hay)
+        • Production tasks of type "resource"—which represent infinite production (e.g., a Farm producing Wheat)
             —have their progress incremented.
         • The corresponding resource is produced when the production progress reaches one whole unit,
             and only the fractional remainder is retained.
@@ -1287,20 +1317,20 @@ class GameAPI:
             remainder = new_prog - whole_units
 
             if entity == "Farm":
-                resources_added["hay"] += whole_units
+                resources_added["Wheat"] += whole_units
             elif entity == "Lumber Mill":
                 resources_added["wood"] += whole_units
             elif entity == "Quarry":
-                resources_added["stone"] += whole_units
+                resources_added["Stone"] += whole_units
             elif entity == "Mines":
                 for _ in range(whole_units):
                     roll = random.randint(1, 100)
                     if roll <= 5:
-                        resources_added["diamond"] += 1
+                        resources_added["Diamond"] += 1
                     elif roll <= 20:
-                        resources_added["gold"] += 1
+                        resources_added["Gold"] += 1
                     else:
-                        resources_added["iron"] += 1
+                        resources_added["Iron"] += 1
             else:
                 print("Warning: Unknown production entity", entity)
             
@@ -1379,7 +1409,7 @@ class GameAPI:
             
             try:
                 # The quest condition ("func") is a string representing a Python expression.
-                # Examples: "Resources['diamond'] >= 5" or "Resources.diamond >= 5"
+                # Examples: "Resources['Diamond'] >= 5" or "Resources.Diamond >= 5"
                 if self.eval_quest_condition(quest["func"], env):
                     # Mark quest complete in the DB.
                     cur.execute("""
@@ -1394,7 +1424,7 @@ class GameAPI:
                     # Split the reward by ampersand in case there is more than one part.
                     reward_entries = quest["reward"].split("&")
                     for entry in reward_entries:
-                        entry = entry.strip()  # e.g., "Resources.money = 1000"
+                        entry = entry.strip()  # e.g., "Resources.Money = 1000"
                         if "=" not in entry:
                             continue
                         left, right = entry.split("=", 1)
@@ -1424,7 +1454,7 @@ class GameAPI:
     class DotDict(dict):
         """
         A dictionary that supports attribute-style access.
-        This allows code such as env.Resources.diamond instead of env["Resources"]["diamond"].
+        This allows code such as env.Resources.Diamond instead of env["Resources"]["Diamond"].
         """
         def __getattr__(self, attr):
             try:
@@ -1453,7 +1483,7 @@ class GameAPI:
         
         Parameters:
         func_str – A string representing a quest condition. For example:
-                    "Resources['diamond'] >= 5" or "Buildings.Castle >= 8".
+                    "Resources['Diamond'] >= 5" or "Buildings.Castle >= 8".
         env – A dictionary with keys "Resources", "Units", "Buildings". Typically,
                 self.player_stats looks like:
                 {
@@ -1472,9 +1502,13 @@ class GameAPI:
         are not permitted.
         """
         # Recursively convert the environment to allow dot access.
-        func_str = func_str.replace(" & ", " and ").replace(" | ", " or ")
+        func_str = func_str.replace(" & ", " and ").replace(" | ", " or ").replace("/","_")
+        #recursivlly replace all keys/values in env from "/" to "_"
+        new_env = env.copy()
+        for key in env.keys():
+            new_env[key.replace("/","_")] = {k.replace("/","_"): v for k, v in env[key].items()}
         
-        safe_env = {key: self.dict_to_dotdict(value) for key, value in env.items()}
+        safe_env = {key: self.dict_to_dotdict(value) for key, value in new_env.items()}
 
         # Optionally restrict access by disallowing builtins.
         try:
@@ -1542,9 +1576,9 @@ class GameAPI:
 def get_config_value_from_string(game_config, object_string):
     """
     object string example
-    "Buildings.Village House"
+    "Buildings.Village_House"
 
-    should get the value from the game_config["Buildings"]["Village House"]
+    should get the value from the game_config["Buildings"]["Village_House"]
     """
     object_list = object_string.split(".")
     current_value = game_config
@@ -1584,7 +1618,7 @@ def game_config_check(game_config):
             assert potential_bad_resrouce in all_resources, f"Incorrect resource {potential_bad_resrouce} in {building} hourly_costs"
             #create a warning if costs is positive
             if game_config["Buildings"][building]["hourly_cost"][potential_bad_resrouce] > 0:
-                print(f"WARNING: {building} has a postive hourly cost for {potential_bad_resrouce}. Players will loose money hourly after building this (typically building produce money). Make sure this is intended")
+                print(f"WARNING: {building} has a postive hourly cost for {potential_bad_resrouce}. Players will loose Money hourly after building this (typically building produce Money). Make sure this is intended")
 
 
     for unit in game_config["Units"]:
@@ -1611,7 +1645,7 @@ def game_config_check(game_config):
             assert potential_bad_resrouce in all_resources, f"Incorrect resource {potential_bad_resrouce} in {unit} hourly costs"   
             #create a warning if costs is positive
             if game_config["Units"][unit]["hourly_cost"][potential_bad_resrouce] < 0:
-                print(f"WARNING: {unit} has negative hourly cost for {potential_bad_resrouce}. Players will make money hourly after building this. Make sure this is intended")
+                print(f"WARNING: {unit} has negative hourly cost for {potential_bad_resrouce}. Players will make Money hourly after building this. Make sure this is intended")
 
 
 

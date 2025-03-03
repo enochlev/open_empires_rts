@@ -2,16 +2,8 @@
 <html>
 <head>
     <title>Dashboard</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/global.css') }}">
     <style>
-       body {
-            font-family: Arial, sans-serif;
-            background-image: url('{{ url_for('static', filename='backgroundImage.png') }}');
-            background-size: 100% auto; /* Cover the width of the screen */
-            background-repeat: no-repeat; /* No repeat for the background image */
-            background-attachment: fixed; /* Keep the background fixed during scrolling */
-            background-color: #99d9ea; /* Set the background color */
-            color: #001;
-        }
 
         /* Add some basic styling */
         form { margin-bottom: 20px; }
@@ -53,11 +45,12 @@
 
 </head>
 <body>
-    {% if message %}
-      <div style="margin: 10px; padding: 10px; background-color: #f0f0f0; border: 1px solid #ddd;">
-        {{ message }}
-      </div>
-    {% endif %}
+  {% for mesg in get_flashed_messages() %}
+  <div class="flash-message">{{ mesg }}</div>
+  {% endfor %}
+
+  <!-- JavaScript to trigger the fade out -->
+  <script src="{{ url_for('static', filename='js/global.js') }}"></script>
 
     <a href="{{ url_for('empire_game.index') }}" style="display: inline-block; padding: 10px 20px; margin: 10px; background-color: #f0f0f0; color: black; border: 1px solid #ddd; text-decoration: none; border-radius: 4px;">Back to Home</a>
     <!-- Refresh button -->
@@ -68,13 +61,13 @@
     <!-- Resources section -->
     <h2>💰 Resources</h2>
     <ul>
-      <li>💵 Money: {{ "%.0f"|format(player_data.Resources.money) }}</li>
-      <li>🪨 Stone: {{ "%.0f"|format(player_data.Resources.stone) }}</li>
-      <li>🔗 Iron: {{ "%.0f"|format(player_data.Resources.iron) }}</li>
-      <li>🟡 Gold: {{ "%.0f"|format(player_data.Resources.gold) }}</li>
-      <li>💎 Diamond: {{ "%.0f"|format(player_data.Resources.diamond) }}</li>
-      <li>🪵 Wood: {{ "%.0f"|format(player_data.Resources.wood) }}</li>
-      <li>🌾 Hay: {{ "%.0f"|format(player_data.Resources.hay) }}</li>
+      <li>💵 Money: {{ "%.0f"|format(player_data.Resources.Money) }}</li>
+      <li>🪨 Stone: {{ "%.0f"|format(player_data.Resources.Stone) }}</li>
+      <li>🔗 Iron: {{ "%.0f"|format(player_data.Resources.Iron) }}</li>
+      <li>🟡 Gold: {{ "%.0f"|format(player_data.Resources.Gold) }}</li>
+      <li>💎 Diamond: {{ "%.0f"|format(player_data.Resources.Diamond) }}</li>
+      <li>🪵 Wood: {{ "%.0f"|format(player_data.Resources.Wood) }}</li>
+      <li>🌾 Wheat: {{ "%.0f"|format(player_data.Resources.Wheat) }}</li>
     </ul>
 
     <!-- Buildings section -->
@@ -126,34 +119,34 @@
       {% endif %}
     {% endfor %}
 
-    <!-- Units Section – Citizens (Village House.Citizen) -->
-    <h3>👨‍🌾 Citizens: {{ player_data.Units.count["Village House.Citizen"] }}</h3>
+    <!-- Units Section – Citizens (Village_House/Citizen)
+    <h3>👨‍🌾 Citizens: {{ player_data.Units.count["Village_House/Citizen"] }}</h3>
     <p>Cost:
-      {% for resource, cost in game_config.Units["Village House.Citizen"].cost.items() %}
+      {% for resource, cost in game_config.Units["Village_House/Citizen"].cost.items() %}
         {{ resource }}: {{ "%.0f"|format(cost) }}{% if not loop.last %}, {% endif %}
       {% endfor %}
     </p>
     <div style="display: flex; justify-content: left;">
       <form method="POST" style="margin-left: 10px;">
-        <input type="hidden" name="unit_type" value="Village House.Citizen">
+        <input type="hidden" name="unit_type" value="Village_House/Citizen">
         <button name="purchase_unit" type="submit">Purchase Citizen</button>
       </form>
       <form method="POST">
-        <input type="hidden" name="unit_type" value="Village House.Citizen">
+        <input type="hidden" name="unit_type" value="Village_House/Citizen">
         <button name="remove_unit_from_queue" type="submit">Remove Citizen from Queue</button>
       </form>
     </div>
 
     <!-- Recruitment Progress for Citizens -->
-    {% set citizen_ongoing = 0 %}
+    <!-- {% set citizen_ongoing = 0 %}
     {% for rec in player_data.Units.ongoing_recruitments %}
-      {% if rec.unit == "Village House.Citizen" %}
+      {% if rec.unit == "Village_House/Citizen" %}
         {% set citizen_ongoing = rec.progress %}
       {% endif %}
     {% endfor %}
     {% set citizen_queued = 0 %}
     {% for rec in player_data.Units.queued_recruitments %}
-      {% if rec.unit == "Village House.Citizen" %}
+      {% if rec.unit == "Village_House/Citizen" %}
         {% set citizen_queued = citizen_queued + 1 %}
       {% endif %}
     {% endfor %}
@@ -162,7 +155,7 @@
       <div style="position: absolute; width: 100%; text-align: center; color: white;">
         {{ citizen_queued + (citizen_ongoing is not none and 1 or 0) }} Citizens – {{ "%.0f"|format(citizen_ongoing|default(0) * 100) }}%
       </div>
-    </div>
+    </div>  -->
 
     <!-- Smithy / Unit Upgrades -->
     {% if player_data.Buildings.levels.Smithy > 0 %}
@@ -205,11 +198,11 @@
     {% if player_data.Buildings.levels.Barracks > 0 %}
       <h2>🏰 Barracks: Level {{ player_data.Buildings.levels.Barracks }}</h2>
       <h5>{{ game_config.Buildings.Barracks.description }}</h5>
-      <p>Soldiers: {{ player_data.Units.count["Barracks.Soldier"] }}</p>
-      <p>Archers: {{ player_data.Units.count["Barracks.Archer"] }}</p>
+      <p>Soldiers: {{ player_data.Units.count["Barracks/Soldier"] }}</p>
+      <p>Archers: {{ player_data.Units.count["Barracks/Archer"] }}</p>
       <h3>👨‍🌾 Training</h3>
       <form method="POST">
-        <select name="barracks_unit_type">
+        <select name="unit_type">
           {% for unit, details in game_config.Units.items() %}
             {% if details.building_source == "Barracks" %}
               {% set curr_level = player_data.Units.levels[unit] %}
@@ -254,7 +247,7 @@
     {% if player_data.Buildings.levels.Stables > 0 %}
       <h2>🏰 Stables: Level {{ player_data.Buildings.levels.Stables }}</h2>
       <h5>{{ game_config.Buildings.Stables.description }}</h5>
-      <p>Calvary: {{ player_data.Units.count["Stables.Calvary"] }}</p>
+      <p>Calvary: {{ player_data.Units.count["Stables/Calvary"] }}</p>
       <h3>👨‍🌾 Training</h3>
       <form method="POST">
         <select name="unit_type">
@@ -350,7 +343,7 @@
     {% if player_data.Buildings.levels["Lumber Mill"] > 0 %}
     <h2>🌲 Lumber Mill: Level {{ player_data.Buildings.levels["Lumber Mill"] }}</h2>
     <h5>{{ game_config.Buildings["Lumber Mill"].description }}</h5>
-    <p>🪵 Wood: {{ "%.0f"|format(player_data.Resources.wood) }}</p>
+    <p>🪵 Wood: {{ "%.0f"|format(player_data.Resources.Wood) }}</p>
 
     {# Filter the ongoing_resources_collection for Lumber Mill tasks #}
     {% set lumber_tasks = player_data.Buildings.ongoing_resources_collection 
@@ -388,7 +381,7 @@
     {% if player_data.Buildings.levels["Lumber Mill"] > 0 %}
     <h2>🌲 Lumber Mill: Level {{ player_data.Buildings.levels["Lumber Mill"] }}</h2>
     <h5>{{ game_config.Buildings["Lumber Mill"].description }}</h5>
-    <p>🪵 Wood: {{ "%.0f"|format(player_data.Resources.wood) }}</p>
+    <p>🪵 Wood: {{ "%.0f"|format(player_data.Resources.Wood) }}</p>
     {% set lumber_tasks = player_data.Buildings.ongoing_resources_collection | selectattr("building", "equalto", "Lumber Mill") | list %}
     <p>🪓 Woodcutters: {{ lumber_tasks|length > 0 and lumber_tasks|sum(attribute='number_of_workers') or 0 }}</p>
     {% if lumber_tasks|length > 0 %}
@@ -417,7 +410,7 @@
     {% if player_data.Buildings.levels["Quarry"] > 0 %}
     <h2>⛏️ Quarry: Level {{ player_data.Buildings.levels["Quarry"] }}</h2>
     <h5>{{ game_config.Buildings["Quarry"].description }}</h5>
-    <p>⛏️ Stone: {{ "%.0f"|format(player_data.Resources.stone) }}</p>
+    <p>⛏️ Stone: {{ "%.0f"|format(player_data.Resources.Stone) }}</p>
     {% set quarry_tasks = player_data.Buildings.ongoing_resources_collection | selectattr("building", "equalto", "Quarry") | list %}
     <p>⛏️ Stone Miners: {{ quarry_tasks|length > 0 and quarry_tasks|sum(attribute='number_of_workers') or 0 }}</p>
     {% if quarry_tasks|length > 0 %}
@@ -446,9 +439,9 @@
     {% if player_data.Buildings.levels["Mines"] > 0 %}
     <h2>⛏️ Mine: Level {{ player_data.Buildings.levels["Mines"] }}</h2>
     <h5>{{ game_config.Buildings["Mines"].description }}</h5>
-    <p>🔗 Iron: {{ "%.0f"|format(player_data.Resources.iron) }}</p>
-    <p>🪙 Gold: {{ "%.0f"|format(player_data.Resources.gold) }}</p>
-    <p>💎 Diamonds: {{ "%.0f"|format(player_data.Resources.diamond) }}</p>
+    <p>🔗 Iron: {{ "%.0f"|format(player_data.Resources.Iron) }}</p>
+    <p>🪙 Gold: {{ "%.0f"|format(player_data.Resources.Gold) }}</p>
+    <p>💎 Diamonds: {{ "%.0f"|format(player_data.Resources.Diamond) }}</p>
     {% set mines_tasks = player_data.Buildings.ongoing_resources_collection | selectattr("building", "equalto", "Mines") | list %}
     <p>⛏️ Miners: {{ mines_tasks|length > 0 and mines_tasks|sum(attribute='number_of_workers') or 0 }}</p>
     {% if mines_tasks|length > 0 %}
@@ -477,7 +470,7 @@
     {% if player_data.Buildings.levels["Farm"] > 0 %}
     <h2>🚜 Farm: Level {{ player_data.Buildings.levels["Farm"] }}</h2>
     <h5>{{ game_config.Buildings["Farm"].description }}</h5>
-    <p>🌾 Hay: {{ "%.0f"|format(player_data.Resources.hay) }}</p>
+    <p>🌾 Wheat: {{ "%.0f"|format(player_data.Resources.Wheat) }}</p>
     {% set farm_tasks = player_data.Buildings.ongoing_resources_collection | selectattr("building", "equalto", "Farm") | list %}
     <p>🚜 Farmers: {{ farm_tasks|length > 0 and farm_tasks|sum(attribute='number_of_workers') or 0 }}</p>
     {% if farm_tasks|length > 0 %}
