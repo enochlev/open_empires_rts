@@ -9,7 +9,10 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            //set path of python
+            "python": "/home/enochlev/.local/share/virtualenvs/open_empires_rts-k9_0mDub/bin/python"
+
         }
     ]
 }
