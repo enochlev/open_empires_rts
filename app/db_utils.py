@@ -1051,6 +1051,7 @@ class GameAPI:
         smithy_level = building_levels.get("Smithy", 0)
         smithy_boost = 1.2 ** smithy_level
         unit_upgrade_multiplier = game_config["game_speed_and_multiplier"]["unit_upgrade_boost_multiplier"]
+        global_speed = game_config["game_speed_and_multiplier"]["global_speed"]
         
         expected_timestamps = []
         now = datetime.datetime.now()
@@ -1073,13 +1074,14 @@ class GameAPI:
                 # rate (units per hour) = (1 / hours_to_build)
                 #                           × smithy_boost
                 #                           × (unit_upgrade_multiplier^(current_building_level - 1))
-                rate = (1.0 / hours_to_build) * smithy_boost * (unit_upgrade_multiplier ** (current_building_level - 1))
+                rate = (1.0 / hours_to_build) * smithy_boost * (unit_upgrade_multiplier ** (current_building_level - 1)) * global_speed
                 
                 # Sort tasks (by start_time) for this production building/unit group.
                 tasks_list = sorted(groups[prod_building][unit_type], key=lambda x: x["start_time"])
+                carry_over = 0
                 for task in tasks_list:
                     prog = task["progress"]
-                    new_prog = prog + hours_passed * rate
+                    new_prog = prog + (hours_passed - ((carry_over)/rate)) * rate
                     if new_prog >= 1:
                         # Complete the production: add one unit to the player's count.
                         cur.execute("""
@@ -1090,6 +1092,8 @@ class GameAPI:
                         # Remove the completed production task.
                         cur.execute("DELETE FROM production_queue WHERE id = ?", (task["id"],))
                         # (If you wish, you can check leftover progress and immediately process the next task.)
+                        carry_over += 1 - prog
+
                     else:
                         # Still in progress – update the task’s progress.
                         cur.execute("UPDATE production_queue SET progress = ? WHERE id = ?", (new_prog, task["id"]))
