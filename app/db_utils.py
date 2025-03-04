@@ -8,6 +8,8 @@ game_config = {}
 with open("default_game_config.json") as f:
     game_config = json.load(f)
 
+from werkzeug.security import generate_password_hash, check_password_hash
+
 
 class PlayerAPI:
     def __init__(self, player_id):
@@ -946,35 +948,42 @@ class GameAPI:
         con.close()
 
     def create_session(self, player_id, plain_password):
-
-        hashed_password = generate_password_hash(plain_password)
-        del plain_password  # Remove the plain password from memory.
-
-
         con = sqlite3.connect(DB_NAME)
         cur = con.cursor()
 
-
-        # Check if the player exists and the password matches.
-        cur.execute("SELECT player_id FROM players WHERE player_id = ? AND password_hash = ?", (player_id, hashed_password))
+        # Retrieve stored password hash
+        cur.execute("SELECT password_hash FROM players WHERE player_id = ?", (player_id,))
         row = cur.fetchone()
         if not row:
             con.close()
             return None
 
-        # Generate a new session token (could use uuid4 for example).
+        stored_hash = row[0]
+
+        # Now check password correctly
+        if not check_password_hash(stored_hash, plain_password):
+            con.close()
+            return None
+
+        del plain_password  # Remove the plain password from memory.
+
+        # If password is valid, generate session
         session_auth = str(uuid.uuid4())
-        # SQLite expression datetime('now', '+24 hours') is used in the DEFAULT defined above;
-        # however, you can also explicitly set it here if you want:
         now = datetime.datetime.now()
         expires_at = now + datetime.timedelta(hours=24)
         
         cur.execute("""
             INSERT INTO sessions (player_id, session_auth, created_at, expires_at)
             VALUES (?, ?, ?, ?)
-        """, (player_id, session_auth, now.strftime("%Y-%m-%d %H:%M:%S"), expires_at.strftime("%Y-%m-%d %H:%M:%S")))
+        """, (
+            player_id,
+            session_auth,
+            now.strftime("%Y-%m-%d %H:%M:%S"),
+            expires_at.strftime("%Y-%m-%d %H:%M:%S")
+        ))
         con.commit()
         con.close()
+        
         return session_auth
 
     def validate_session(self, player_id, session_auth):
@@ -1795,8 +1804,6 @@ game_config_check(game_config)
 
 
 DB_NAME = "empire-game.db"
-
-generate_password_hash = lambda x: x + "_hashed" #placeholder
 
 
 # If run as a script, initialize the DB.
