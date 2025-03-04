@@ -60,7 +60,7 @@ class PlayerAPI:
                     CREATE TABLE IF NOT EXISTS production_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_id INTEGER,
-                production_type TEXT,      -- 'contruction' or 'unit' or 'resource' or 'research'
+                production_type TEXT,      -- 'contruction' or 'unit_production' or 'resource' or 'unit_research'
                 entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks/Soldier' or 'Stables.Calvery') or resource (e.g., 'Wheat')
                 number_of_workers INTEGER, -- number of workers assigned to the task
                 start_time TIMESTAMP DEFAULT (datetime('now')),
@@ -149,34 +149,30 @@ class PlayerAPI:
             stats["Units"]["count"][unit] = player_units.get(unit, {"count": 0, "level": 0})["count"]
 
             #search if there are ongoing builds
+            queued = False
             for queue in player_queues:
-                if queue["production_type"] == "unit" and queue["entity"] == unit:
-                    stats["Units"]["ongoing_recruitments"] += [{"unit": unit, "progress": queue["progress"]}]
-                    break
-            
-            #search if there are queued recruitments
-            for queue in player_queues:
-                if queue["production_type"] == "unit" and queue["entity"] == unit:
-                    stats["Units"]["queued_recruitments"] += [{"unit": unit, "order": queue['id']}]
-                    #do not break because we want a list
-                
+                if queue["production_type"] == "unit_production" and queue["entity"] == unit:
+                    if queued==False:
+                        stats["Units"]["ongoing_recruitments"] += [{"unit": unit, "progress": queue["progress"]}]
+                        queued = True
+                    else:
+                        stats["Units"]["queued_recruitments"] += [{"unit": unit, "order": queue['id']}]
+            queued = False 
             #search if there are ongoing upgrades
             for queue in player_queues:
                 if queue["production_type"] == "unit_research" and queue["entity"] == unit:
-                    stats["Units"]["ongoing_upgrades"] = {"unit": unit, "progress": queue["progress"], "level": stats["Units"]["levels"][unit] + 1}
-                    break
-            #search if there are queued upgrades
-            for queue in player_queues:
-                if queue["production_type"] == "unit_research" and queue["entity"] == unit:
-                    stats["Units"]["queued_upgrades"] += [{"unit": unit, "level": stats["Units"]["levels"][unit] + 1, "order": queue['id']}]
-                    #do not break because we want a list
+                    if queued==False:
+                        stats["Units"]["ongoing_upgrades"] = {"unit": unit, "progress": queue["progress"], "level": stats["Units"]["levels"][unit] + 1}
+                        queued = True
+                    else:
+                        stats["Units"]["queued_upgrades"] += [{"unit": unit, "level": stats["Units"]["levels"][unit] + 1, "order": queue['id']}]
+
 
         #sort queued_recruitments by order then remove it
         stats["Units"]["queued_recruitments"] = sorted(stats["Units"]["queued_recruitments"], key=lambda x: x["order"])
-        stats["Units"]["queued_recruitments"] = [x.pop('order') for x in stats["Units"]["queued_recruitments"]]
         #sort queued_upgrades by order then remove it
         stats["Units"]["queued_upgrades"] = sorted(stats["Units"]["queued_upgrades"], key=lambda x: x["order"])
-        stats["Units"]["queued_upgrades"] = [x.pop('order') for x in stats["Units"]["queued_upgrades"]]
+        #stats["Units"]["queued_upgrades"] = [{"unit": x.pop('unit')} for x in stats["Units"]["queued_upgrades"]]
 
         # ----------------------
         # Initialize Resources
@@ -279,7 +275,7 @@ class PlayerAPI:
         
         # Calculate unit cost (apply cost multiplier depending on the unit level).
         unit_cost = game_config["Units"][unit_type]["cost"].copy()
-        upgrade_multiplier = game_config["Units"][unit_type]["upgrade_multiplier"]
+        upgrade_multiplier = game_config["game_speed_and_multiplier"]["unit_upgrade_cost_multiplier"]
 
         for resource, cost in unit_cost.items():
             unit_cost[resource] = cost * (upgrade_multiplier ** (unit_level - 1))
@@ -292,7 +288,7 @@ class PlayerAPI:
         # For a unit build, the production queue row uses production_type "unit_production"
         # and the entity is built as "<production_building>.<unit_type>" (e.g., "Stables/Calvary").
         # In unit production you only assign one worker per task.
-        entity = building_source + '.' + unit_type
+        entity = unit_type
         
         # Insert a new row in the production_queue table.
         cur = self.db.cursor()
@@ -305,12 +301,12 @@ class PlayerAPI:
 
         cur.execute("""
             INSERT INTO production_queue (player_id, production_type, entity, number_of_workers, progress, status)
-            VALUES (?, 'unit', ?, 1, 0.0, 'in_progress')
+            VALUES (?, 'unit_production', ?, 1, 0.0, 'in_progress')
         """, (self.player_id, entity))
         self.db.commit()
+        cur.close()
         
         # Update the in-memory queue counter.
-        self.player_stats["Units"]["queued_builds"][unit_type] += 1
         return "Success"
     
     def remove_unit_from_queue(self, unit_type):
@@ -331,7 +327,7 @@ class PlayerAPI:
                 WHERE player_id = ? AND production_type = 'unit_production'
                   AND entity = ? AND progress = 0
                 LIMIT 1
-            """, (self.player_id, game_config["Units"][unit_type]["building_source"] + '.' + unit_type))
+            """, (self.player_id, unit_type))
             self.player_stats["Units"]["queued_builds"][unit_type] -= 1
         elif ongoing is not None:
             # If a production is in progress, cancel it (set to cancelled).
@@ -341,7 +337,7 @@ class PlayerAPI:
                 WHERE player_id = ? AND production_type = 'unit_production'
                   AND entity = ?
                 LIMIT 1
-            """, (self.player_id, game_config["Units"][unit_type]["building_source"] + '.' + unit_type))
+            """, (self.player_id, unit_type))
             self.player_stats["Units"]["ongoing_builds"][unit_type] = None
 
         # Refund the unit cost.
@@ -830,7 +826,7 @@ class GameAPI:
             CREATE TABLE IF NOT EXISTS production_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_id INTEGER,
-                production_type TEXT,      -- 'contruction' or 'unit' or 'resource' or 'research'
+                production_type TEXT,      -- 'contruction' or 'unit_production' or 'resource' or 'unit_research'
                 entity TEXT,               -- which building (e.g., 'Barracks') or unit (e.g., 'Barracks/Soldier' or 'Stables.Calvery') or resource (e.g., 'Farm')
                 number_of_workers INTEGER, -- number of workers assigned to the task
                 start_time TIMESTAMP DEFAULT (datetime('now')),
@@ -921,7 +917,7 @@ class GameAPI:
 
 
         for unit in game_config["Units"].keys():
-            if game_config["Units"][unit]["start_amount"] == 0:
+            if game_config["Units"][unit]["start_amount"] == 0 and game_config["Units"][unit]["starting_level"] == 0:
                 continue
             cur.execute("""
                 INSERT INTO units (player_id, unit_type, count, level)
@@ -1033,11 +1029,12 @@ class GameAPI:
         groups = {}
         for task in prod_tasks:
             # We expect the entity to be in the form "Building.Unit", e.g., "Stables/Calvary".
-            parts = task["entity"].split('.')
+            parts = task["entity"].split('/')
             if len(parts) != 2:
                 print("Invalid entity format in unit production task:", task["entity"])
                 continue
             prod_building, unit_type = parts
+            unit_type = task["entity"]
             if prod_building not in groups:
                 groups[prod_building] = {}
             if unit_type not in groups[prod_building]:
@@ -1476,8 +1473,6 @@ class GameAPI:
                         WHERE player_id = ? AND quest_index = ?
                     """, (player_id, qid))
                     # Also update our in-memory record if desired.
-                    self.player_stats["Quests"][qid] = True
-                    completed_quests.append(qid)
                     
                     # Split the reward by ampersand in case there is more than one part.
                     reward_entries = quest["reward"].split("&")
@@ -1494,10 +1489,36 @@ class GameAPI:
                             try:
                                 amount = float(right)
                             except ValueError:
-                                amount = 0
+                                print("Reward parse warning: invalid amount in:", entry)
+
                             # Award the resources.
-                            self.player_stats["Resources"][resource_name] = \
-                                self.player_stats["Resources"].get(resource_name, 0) + amount
+                            con.execute(f"""
+                                UPDATE resources
+                                SET {resource_name} = {resource_name} + ?
+                                WHERE player_id = ?
+                            """, (amount, player_id))
+                        if left.startswith("Units."):
+                            unit_name = left[len("Units."):]
+                            try:
+                                amount = float(right)
+                            except ValueError:
+                                print("Reward parse warning: invalid amount in:", entry)
+                            # first check if unit exists in user db, and iether update to add row
+                            # or update the row
+                            unit = cur.execute("SELECT * FROM units WHERE player_id = ? AND unit_type = ?", (player_id, unit_name)).fetchone()
+                            if unit:
+                                cur.execute(f"""
+                                    UPDATE units
+                                    SET count = count + ?
+                                    WHERE player_id = ? AND unit_type = ?
+                                """, (amount, player_id, unit_name))
+                            else:
+                                cur.execute(f"""
+                                    INSERT INTO units (player_id, unit_type, count, level)
+                                    VALUES (?, ?, ?, 1)
+                                """, (player_id, unit_name, amount))
+                            # Award the units.
+                        
                             print("Quest", qid, "completed: Awarded", amount, resource_name)
                         else:
                             print("Reward parse warning: unknown key in:", left)

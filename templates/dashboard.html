@@ -2,534 +2,478 @@
 <html>
 <head>
     <title>Dashboard</title>
+    <!-- Use your static references accordingly -->
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/global.css') }}">
-    <style>
-
-        /* Add some basic styling */
-        form { margin-bottom: 20px; }
-        input, button { margin-right: 10px; }
-        .progress-container {
-            width: 300pt; 
-            background-color: #ddd; 
-        }
-        .progress-bar {
-            height: 20px; 
-            background-color: #4CAF50; 
-            text-align: center; 
-            line-height: 20px; 
-            color: white; 
-        }
-        .quest-box {
-            border: 1px solid;
-            margin: 5px;
-            padding: 5px;
-            width: 300pt;
-        }
-        .quest-completed {
-            background-color: green;
-        }
-        .quest-not-completed {
-            background-color: white;
-        }
-        #game-container {
-            position: relative;
-            width: 1500px;
-            height: 1000px;
-            background-size: cover;
-        }
-        .building {
-            position: absolute;
-        }
-    </style>
-    <!-- <meta http-equiv="refresh" content="30"> -->
-
 </head>
 <body>
-  {% for mesg in get_flashed_messages() %}
-  <div class="flash-message">{{ mesg }}</div>
-  {% endfor %}
 
-  <!-- JavaScript to trigger the fade out -->
+<!-- Flash messages -->
+{% for mesg in get_flashed_messages() %}
+<div class="flash-message">{{ mesg }}</div>
+{% endfor %}
 
+<!-- JavaScript to trigger the fade out, tab switching, etc. -->
+<script src="{{ url_for('static', filename='js/global.js') }}"></script>
 
-  <script src="{{ url_for('static', filename='js/global.js') }}"></script>
+<!-- Top navigation or quick links -->
+<a class="btn" href="{{ url_for('empire_game.index') }}">Back to Home</a>
+<a class="btn" href="{{ url_for('empire_game.dashboard') }}">Refresh</a>
 
-    <a href="{{ url_for('empire_game.index') }}" style="display: inline-block; padding: 10px 20px; margin: 10px; background-color: #f0f0f0; color: black; border: 1px solid #ddd; text-decoration: none; border-radius: 4px;">Back to Home</a>
-    <!-- Refresh button -->
-    <a href="{{ url_for('empire_game.dashboard') }}" style="display: inline-block; padding: 10px 20px; margin: 10px; background-color: #f0f0f0; color: black; border: 1px solid #ddd; text-decoration: none; border-radius: 4px;">Refresh</a>
+<!-- Top row: Resources -->
+<div class="resources-row">
+  <span>💵 Money: {{ "%.0f"|format(player_data.Resources.Money) }}</span>
+  <span>🪨 Stone: {{ "%.0f"|format(player_data.Resources.Stone) }}</span>
+  <span>🔗 Iron: {{ "%.0f"|format(player_data.Resources.Iron) }}</span>
+  <span>🟡 Gold: {{ "%.0f"|format(player_data.Resources.Gold) }}</span>
+  <span>💎 Diamond: {{ "%.0f"|format(player_data.Resources.Diamond) }}</span>
+  <span>🪵 Wood: {{ "%.0f"|format(player_data.Resources.Wood) }}</span>
+  <span>🌾 Wheat: {{ "%.0f"|format(player_data.Resources.Wheat) }}</span>
+</div>
 
-    <h1>🎮 Dashboard for {{ player_data["Player Name"] }}</h1>
+<!-- Button to toggle quests on the far right side -->
+<button id="quest-toggle-btn" class="btn">Toggle Quests</button>
 
-    <!-- Resources section -->
-    <h2>💰 Resources</h2>
-    <ul>
-      <li>💵 Money: {{ "%.0f"|format(player_data.Resources.Money) }}</li>
-      <li>🪨 Stone: {{ "%.0f"|format(player_data.Resources.Stone) }}</li>
-      <li>🔗 Iron: {{ "%.0f"|format(player_data.Resources.Iron) }}</li>
-      <li>🟡 Gold: {{ "%.0f"|format(player_data.Resources.Gold) }}</li>
-      <li>💎 Diamond: {{ "%.0f"|format(player_data.Resources.Diamond) }}</li>
-      <li>🪵 Wood: {{ "%.0f"|format(player_data.Resources.Wood) }}</li>
-      <li>🌾 Wheat: {{ "%.0f"|format(player_data.Resources.Wheat) }}</li>
-    </ul>
-
-    <!-- Buildings section -->
-    <h2>🏰 Castle: Level {{ player_data.Buildings.levels.Castle }}</h2>
-    <h5>{{ game_config.Buildings.Castle.description }}</h5>
-    <h3>🏠 Buildings</h3>
-    <ul>
-      {% for building, details in game_config.Buildings.items() %}
-        {% if player_data.Buildings.levels[building] > 0 %}
-          <li>{{ building }}: {{ player_data.Buildings.levels[building] }}</li>
-        {% endif %}
-      {% endfor %}
-    </ul>
-
-    <!-- Upgrade Building Form -->
-    <form method="POST">
-      <select name="building_type">
-        {% for building, details in game_config.Buildings.items() %}
-          {% if player_data.Buildings.levels[building] >= details.max_level %}
-            <option value="{{ building }}" disabled>{{ building }} - Max Level</option>
-          {% else %}
-            {% set upgrade_cost = [] %}
-            {% for resource, cost in details.cost.items() %}
-              {% set new_cost = cost * (game_config.game_speed_and_multiplier.building_upgrade_cost_multiplier ** player_data.Buildings.levels[building]) %}
-              {% set rounded_cost = new_cost | round(method='ceil') | int %}
-              {% set _ = upgrade_cost.append(resource ~ ": " ~ rounded_cost) %}
-            {% endfor %}
-            <option value="{{ building }}">
-              {{ building }} - Upgrade to Level {{ player_data.Buildings.levels[building] + 1 }}:
-              {{ upgrade_cost | join(", ") }}
-            </option>
-          {% endif %}
-        {% endfor %}
-      </select>
-      <button name="purchase_building" type="submit">Upgrade Building</button>
-    </form>
-
-    <!-- Ongoing Building Upgrade Progress -->
-    {% for building, details in game_config.Buildings.items() %}
-    {% set ongoing_builds = player_data.Buildings.ongoing_builds %}
-    {% for ongoing in ongoing_builds %}
-      {% if ongoing.building == building %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-          <div class="progress-bar" style="background-color: green; width: {{ ongoing.progress * 100 }}%; height: 100%; position: absolute;"></div>
-          <div style="position: absolute; width: 100%; text-align: center; color: white;">
-            {{ building }} {{ "%.0f"|format(ongoing.progress * 100) }}%
-          </div>
-        </div>
-        <br>
-      {% endif %}
-    {% endfor %}
-  {% endfor %}
-
-    <!-- Units Section – Citizens (Village_House/Citizen)
-    <h3>👨‍🌾 Citizens: {{ player_data.Units.count["Village_House/Citizen"] }}</h3>
-    <p>Cost:
-      {% for resource, cost in game_config.Units["Village_House/Citizen"].cost.items() %}
-        {{ resource }}: {{ "%.0f"|format(cost) }}{% if not loop.last %}, {% endif %}
-      {% endfor %}
-    </p>
-    <div style="display: flex; justify-content: left;">
-      <form method="POST" style="margin-left: 10px;">
-        <input type="hidden" name="unit_type" value="Village_House/Citizen">
-        <button name="purchase_unit" type="submit">Purchase Citizen</button>
-      </form>
-      <form method="POST">
-        <input type="hidden" name="unit_type" value="Village_House/Citizen">
-        <button name="remove_unit_from_queue" type="submit">Remove Citizen from Queue</button>
-      </form>
-    </div>
-
-    <!-- Recruitment Progress for Citizens -->
-    <!-- {% set citizen_ongoing = 0 %}
-    {% for rec in player_data.Units.ongoing_recruitments %}
-      {% if rec.unit == "Village_House/Citizen" %}
-        {% set citizen_ongoing = rec.progress %}
-      {% endif %}
-    {% endfor %}
-    {% set citizen_queued = 0 %}
-    {% for rec in player_data.Units.queued_recruitments %}
-      {% if rec.unit == "Village_House/Citizen" %}
-        {% set citizen_queued = citizen_queued + 1 %}
-      {% endif %}
-    {% endfor %}
-    <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-      <div class="progress-bar" style="background-color: green; width: {{ citizen_ongoing|default(0, true) * 100 }}%; height: 100%; position: absolute;"></div>
-      <div style="position: absolute; width: 100%; text-align: center; color: white;">
-        {{ citizen_queued + (citizen_ongoing is not none and 1 or 0) }} Citizens – {{ "%.0f"|format(citizen_ongoing|default(0) * 100) }}%
-      </div>
-    </div>  -->
-
-    <!-- Smithy / Unit Upgrades -->
-    {% if player_data.Buildings.levels.Smithy > 0 %}
-      <h2>🛠 Smithy: Level {{ player_data.Buildings.levels.Smithy }}</h2>
-      <h5>{{ game_config.Buildings.Smithy.description }}</h5>
-      <h3>🗡 Upgrades</h3>
-      <form method="POST">
-        <select name="unit_type">
-          {% for unit, details in game_config.Units.items() %}
-            {% if player_data.Units.levels[unit] >= details.max_level %}
-              <option value="{{ unit }}" disabled>{{ unit }} - Max Level</option>
-            {% else %}
-              {% set upgrade_cost = [] %}
-              {% for resource, cost in details.upgrade_cost.items() %}
-                {% set new_cost = cost * (game_config.game_speed_and_multiplier.unit_upgrade_cost_multiplier ** player_data.Units.levels[unit]) %}
-                {% set rounded_cost = new_cost | round(method='ceil') | int %}
-                {% set _ = upgrade_cost.append(resource ~ ": " ~ rounded_cost) %}
-              {% endfor %}
-              <option value="{{ unit }}">
-                {{ unit }} - Upgrade to Level {{ player_data.Units.levels[unit] + 1 }}: {{ upgrade_cost | join(", ") }}
-              </option>
-            {% endif %}
-          {% endfor %}
-        </select>
-        <button name="upgrade_unit" type="submit">Upgrade Unit</button>
-      </form>
-      <!-- Ongoing unit upgrade progress (filtering the single upgrade in progress) -->
-      {% if player_data.Units.ongoing_upgrades %}
-        {% set ongoing_upg = player_data.Units.ongoing_upgrades %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-          <div class="progress-bar" style="background-color: green; width: {{ ongoing_upg.progress * 100 }}%; height: 100%; position: absolute;"></div>
-          <div style="position: absolute; width: 100%; text-align: center; color: white;">
-            Upgrading {{ ongoing_upg.unit }} – {{ "%.0f"|format(ongoing_upg.progress * 100) }}%
-          </div>
-        </div>
-      {% endif %}
-    {% endif %}
-
-    <!-- Barracks Training Section -->
-    {% if player_data.Buildings.levels.Barracks > 0 %}
-      <h2>🏰 Barracks: Level {{ player_data.Buildings.levels.Barracks }}</h2>
-      <h5>{{ game_config.Buildings.Barracks.description }}</h5>
-      <p>Soldiers: {{ player_data.Units.count["Barracks/Soldier"] }}</p>
-      <p>Archers: {{ player_data.Units.count["Barracks/Archer"] }}</p>
-      <h3>👨‍🌾 Training</h3>
-      <form method="POST">
-        <select name="unit_type">
-          {% for unit, details in game_config.Units.items() %}
-            {% if details.building_source == "Barracks" %}
-              {% set curr_level = player_data.Units.levels[unit] %}
-              {% set upgrade_cost = [] %}
-              {% for resource, cost in details.cost.items() %}
-                {% set new_cost = cost * (game_config.game_speed_and_multiplier.unit_upgrade_cost_multiplier ** (curr_level - 1)) %}
-                {% set rounded_cost = new_cost | round(method='ceil') | int %}
-                {% set _ = upgrade_cost.append(resource ~ ": " ~ rounded_cost) %}
-              {% endfor %}
-              <option value="{{ unit }}">
-                {{ unit }} - {{ upgrade_cost | join(", ") }}
-              </option>
-            {% endif %}
-          {% endfor %}
-        </select>
-        <button name="purchase_unit" type="submit">Purchase Unit</button>
-      </form>
-      {% for unit, details in game_config.Units.items() %}
-        {% if details.building_source == "Barracks" %}
-          {% set ongoing = None %}
-          {% for rec in player_data.Units.ongoing_recruitments %}
-            {% if rec.unit == unit %}{% set ongoing = rec.progress %}{% endif %}
-          {% endfor %}
-          {% set queued = 0 %}
-          {% for rec in player_data.Units.queued_recruitments %}
-            {% if rec.unit == unit %}{% set queued = queued + 1 %}{% endif %}
-          {% endfor %}
-          {% if ongoing is not none %}
-            <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-              <div class="progress-bar" style="background-color: green; width: {{ ongoing * 100 }}%; height: 100%; position: absolute;"></div>
-              <div style="position: absolute; width: 100%; text-align: center; color: white;">
-                {{ queued + 1 }} {{ unit }} – {{ "%.0f"|format(ongoing * 100) }}%
-              </div>
-            </div>
-            <br>
-          {% endif %}
-        {% endif %}
-      {% endfor %}
-    {% endif %}
-
-    <!-- Stables Training Section -->
-    {% if player_data.Buildings.levels.Stables > 0 %}
-      <h2>🏰 Stables: Level {{ player_data.Buildings.levels.Stables }}</h2>
-      <h5>{{ game_config.Buildings.Stables.description }}</h5>
-      <p>Calvary: {{ player_data.Units.count["Stables/Calvary"] }}</p>
-      <h3>👨‍🌾 Training</h3>
-      <form method="POST">
-        <select name="unit_type">
-          {% for unit, details in game_config.Units.items() %}
-            {% if details.building_source == "Stables" %}
-              {% set curr_level = player_data.Units.levels[unit] %}
-              {% set upgrade_cost = [] %}
-              {% for resource, cost in details.cost.items() %}
-                {% set new_cost = cost * (game_config.game_speed_and_multiplier.unit_upgrade_cost_multiplier ** (curr_level - 1)) %}
-                {% set rounded_cost = new_cost | round(method='ceil') | int %}
-                {% set _ = upgrade_cost.append(resource ~ ": " ~ rounded_cost) %}
-              {% endfor %}
-              <option value="{{ unit }}">
-                {{ unit }} - {{ upgrade_cost | join(", ") }}
-              </option>
-            {% endif %}
-          {% endfor %}
-        </select>
-        <button name="purchase_unit" type="submit">Purchase Unit</button>
-      </form>
-      {% for unit, details in game_config.Units.items() %}
-        {% if details.building_source == "Stables" %}
-          {% set ongoing = None %}
-          {% for rec in player_data.Units.ongoing_recruitments %}
-            {% if rec.unit == unit %}{% set ongoing = rec.progress %}{% endif %}
-          {% endfor %}
-          {% set queued = 0 %}
-          {% for rec in player_data.Units.queued_recruitments %}
-            {% if rec.unit == unit %}{% set queued = queued + 1 %}{% endif %}
-          {% endfor %}
-          {% if ongoing is not none %}
-            <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-              <div class="progress-bar" style="background-color: green; width: {{ ongoing * 100 }}%; height: 100%; position: absolute;"></div>
-              <div style="position: absolute; width: 100%; text-align: center; color: white;">
-                {{ queued + 1 }} {{ unit }} – {{ "%.0f"|format(ongoing * 100) }}%
-              </div>
-            </div>
-            <br>
-          {% endif %}
-        {% endif %}
-      {% endfor %}
-    {% endif %}
-
-    <!-- Dock Training Section -->
-    {% if player_data.Buildings.levels.Dock > 0 %}
-      <h2>⛵ Dock: Level {{ player_data.Buildings.levels.Dock }}</h2>
-      <h5>{{ game_config.Buildings.Dock.description }}</h5>
-      <p>🚢 Ships: {{ player_data.Units.count.Boat }}</p>
-      <h3>🚢 Ship Yard</h3>
-      <form method="POST">
-        <select name="unit_type">
-          {% for unit, details in game_config.Units.items() %}
-            {% if details.building_source == "Dock" %}
-              {% set curr_level = player_data.Units.levels[unit] %}
-              {% set upgrade_cost = [] %}
-              {% for resource, cost in details.cost.items() %}
-                {% set new_cost = cost * (game_config.game_speed_and_multiplier.unit_upgrade_cost_multiplier ** curr_level) %}
-                {% set rounded_cost = new_cost | round(method='ceil') | int %}
-                {% set _ = upgrade_cost.append(resource ~ ": " ~ rounded_cost) %}
-              {% endfor %}
-              <option value="{{ unit }}">
-                {{ unit }} - {{ upgrade_cost | join(", ") }}
-              </option>
-            {% endif %}
-          {% endfor %}
-        </select>
-        <button name="purchase_unit" type="submit">Purchase Unit</button>
-      </form>
-      {% for unit, details in game_config.Units.items() %}
-        {% if details.building_source == "Dock" %}
-          {% set ongoing = None %}
-          {% for rec in player_data.Units.ongoing_recruitments %}
-            {% if rec.unit == unit %}{% set ongoing = rec.progress %}{% endif %}
-          {% endfor %}
-          {% set queued = 0 %}
-          {% for rec in player_data.Units.queued_recruitments %}
-            {% if rec.unit == unit %}{% set queued = queued + 1 %}{% endif %}
-          {% endfor %}
-          {% if ongoing is not none %}
-            <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-              <div class="progress-bar" style="background-color: green; width: {{ ongoing * 100 }}%; height: 100%; position: absolute;"></div>
-              <div style="position: absolute; width: 100%; text-align: center; color: white;">
-                {{ queued + 1 }} {{ unit }} – {{ "%.0f"|format(ongoing * 100) }}%
-              </div>
-            </div>
-            <br>
-          {% endif %}
-        {% endif %}
-      {% endfor %}
-    {% endif %}
-
-
-
-    <!-- Lumber Mill -->
-    {% if player_data.Buildings.levels["Lumber Mill"] > 0 %}
-    <h2>🌲 Lumber Mill: Level {{ player_data.Buildings.levels["Lumber Mill"] }}</h2>
-    <h5>{{ game_config.Buildings["Lumber Mill"].description }}</h5>
-    <p>🪵 Wood: {{ "%.0f"|format(player_data.Resources.Wood) }}</p>
-    {% set lumber_tasks = player_data.Buildings.ongoing_resources_collection | selectattr("building", "equalto", "Lumber Mill") | list %}
-    <p>🪓 Woodcutters: {{ lumber_tasks|length > 0 and lumber_tasks|sum(attribute='number_of_workers') or 0 }}</p>
-    {% if lumber_tasks|length > 0 %}
-        {% for task in lumber_tasks %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-            <div class="progress-bar" style="background-color: green; width: {{ task.progress * 100 }}%; height: 100%; position: absolute;"></div>
-            <div style="position: absolute; width: 100%; text-align: center; color: white;">
-            {{ "%.0f"|format(task.progress * 100) }}%
-            </div>
-        </div>
-        {% endfor %}
-    {% else %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-        <div class="progress-bar" style="background-color: green; width: 0%; height: 100%; position: absolute;"></div>
-        <div style="position: absolute; width: 100%; text-align: center; color: white;">0%</div>
-        </div>
-    {% endif %}
-    <form method="POST">
-        <input type="hidden" name="building_type" value="Lumber Mill">
-        <button name="add_worker" type="submit">Add Woodcutter</button>
-        <button name="remove_worker" type="submit">Remove Woodcutter</button>
-    </form>
-    {% endif %}
-
-    <!-- Quarry -->
-    {% if player_data.Buildings.levels["Quarry"] > 0 %}
-    <h2>⛏️ Quarry: Level {{ player_data.Buildings.levels["Quarry"] }}</h2>
-    <h5>{{ game_config.Buildings["Quarry"].description }}</h5>
-    <p>⛏️ Stone: {{ "%.0f"|format(player_data.Resources.Stone) }}</p>
-    {% set quarry_tasks = player_data.Buildings.ongoing_resources_collection | selectattr("building", "equalto", "Quarry") | list %}
-    <p>⛏️ Stone Miners: {{ quarry_tasks|length > 0 and quarry_tasks|sum(attribute='number_of_workers') or 0 }}</p>
-    {% if quarry_tasks|length > 0 %}
-        {% for task in quarry_tasks %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-            <div class="progress-bar" style="background-color: green; width: {{ task.progress * 100 }}%; height: 100%; position: absolute;"></div>
-            <div style="position: absolute; width: 100%; text-align: center; color: white;">
-            {{ "%.0f"|format(task.progress * 100) }}%
-            </div>
-        </div>
-        {% endfor %}
-    {% else %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-        <div class="progress-bar" style="background-color: green; width: 0%; height: 100%; position: absolute;"></div>
-        <div style="position: absolute; width: 100%; text-align: center; color: white;">0%</div>
-        </div>
-    {% endif %}
-    <form method="POST">
-        <input type="hidden" name="building_type" value="Quarry">
-        <button name="add_worker" type="submit">Add Stone Miner</button>
-        <button name="remove_worker" type="submit">Remove Stone Miner</button>
-    </form>
-    {% endif %}
-
-    <!-- Mines -->
-    {% if player_data.Buildings.levels["Mines"] > 0 %}
-    <h2>⛏️ Mine: Level {{ player_data.Buildings.levels["Mines"] }}</h2>
-    <h5>{{ game_config.Buildings["Mines"].description }}</h5>
-    <p>🔗 Iron: {{ "%.0f"|format(player_data.Resources.Iron) }}</p>
-    <p>🪙 Gold: {{ "%.0f"|format(player_data.Resources.Gold) }}</p>
-    <p>💎 Diamonds: {{ "%.0f"|format(player_data.Resources.Diamond) }}</p>
-    {% set mines_tasks = player_data.Buildings.ongoing_resources_collection | selectattr("building", "equalto", "Mines") | list %}
-    <p>⛏️ Miners: {{ mines_tasks|length > 0 and mines_tasks|sum(attribute='number_of_workers') or 0 }}</p>
-    {% if mines_tasks|length > 0 %}
-        {% for task in mines_tasks %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-            <div class="progress-bar" style="background-color: green; width: {{ task.progress * 100 }}%; height: 100%; position: absolute;"></div>
-            <div style="position: absolute; width: 100%; text-align: center; color: white;">
-            {{ "%.0f"|format(task.progress * 100) }}%
-            </div>
-        </div>
-        {% endfor %}
-    {% else %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-        <div class="progress-bar" style="background-color: green; width: 0%; height: 100%; position: absolute;"></div>
-        <div style="position: absolute; width: 100%; text-align: center; color: white;">0%</div>
-        </div>
-    {% endif %}
-    <form method="POST">
-        <input type="hidden" name="building_type" value="Mines">
-        <button name="add_worker" type="submit">Add Miner</button>
-        <button name="remove_worker" type="submit">Remove Miner</button>
-    </form>
-    {% endif %}
-
-    <!-- Farm -->
-    {% if player_data.Buildings.levels["Farm"] > 0 %}
-    <h2>🚜 Farm: Level {{ player_data.Buildings.levels["Farm"] }}</h2>
-    <h5>{{ game_config.Buildings["Farm"].description }}</h5>
-    <p>🌾 Wheat: {{ "%.0f"|format(player_data.Resources.Wheat) }}</p>
-    {% set farm_tasks = player_data.Buildings.ongoing_resources_collection | selectattr("building", "equalto", "Farm") | list %}
-    <p>🚜 Farmers: {{ farm_tasks|length > 0 and farm_tasks|sum(attribute='number_of_workers') or 0 }}</p>
-    {% if farm_tasks|length > 0 %}
-        {% for task in farm_tasks %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-            <div class="progress-bar" style="background-color: green; width: {{ task.progress * 100 }}%; height: 100%; position: absolute;"></div>
-            <div style="position: absolute; width: 100%; text-align: center; color: white;">
-            {{ "%.0f"|format(task.progress * 100) }}%
-            </div>
-        </div>
-        {% endfor %}
-    {% else %}
-        <div class="progress-container" style="background-color: grey; width: 200pt; height: 20px; position: relative;">
-        <div class="progress-bar" style="background-color: green; width: 0%; height: 100%; position: absolute;"></div>
-        <div style="position: absolute; width: 100%; text-align: center; color: white;">0%</div>
-        </div>
-    {% endif %}
-    <form method="POST">
-        <input type="hidden" name="building_type" value="Farm">
-        <button name="add_worker" type="submit">Add Farmer</button>
-        <button name="remove_worker" type="submit">Remove Farmer</button>
-    </form>
-    {% endif %}
-
-    <!-- Trades Section (example shown for Market) -->
-    {% if player_data.Buildings.levels["Market"] > 0 %}
-      <h2>🔄 Market: Level {{ player_data.Buildings.levels["Market"] }}</h2>
-      <h5>{{ game_config.Buildings["Market"].description }}</h5>
-      <div>
-        {% for trade in trades %}
-          <div style="border: 1px solid; margin: 5px; padding: 5px; width: 300pt;">
-            <p>Trade Offer by {{ trade.source_player }}</p>
-            <p>Cost:
-              {% for resource, amount in trade.resources_cost.items() %}
-                {{ resource }}: {{ amount }}{% if not loop.last %}, {% endif %}
-              {% endfor %}
-            </p>
-            <p>Earn:
-              {% for resource, amount in trade.resources_earned.items() %}
-                {{ resource }}: {{ amount }}{% if not loop.last %}, {% endif %}
-              {% endfor %}
-            </p>
-            {% if trade.source_player == player_data["Player Name"] %}
-              <form method="POST">
-                <input type="hidden" name="trade_index" value="{{ loop.index0 }}">
-                <button name="remove_trade_offer" type="submit">Remove Trade Offer</button>
-              </form>
-            {% else %}
-              <form method="POST">
-                <input type="hidden" name="trade_index" value="{{ loop.index0 }}">
-                <button name="accept_trade_offer" type="submit">Make Trade</button>
-              </form>
-            {% endif %}
-          </div>
-        {% endfor %}
-      </div>
-      <!-- Create New Trade -->
-      <div style="margin-top: 20px; border: 1px solid; padding: 10px; width: 300pt;">
-        <h3>Create New Trade</h3>
-        <form method="POST">
-          <label for="resources_cost">Resource Cost:</label>
-          <select name="resources_cost">
-            {% for resource in player_data.Resources.keys() %}
-              <option value="{{ resource }}">{{ resource }}</option>
-            {% endfor %}
-          </select>
-          <input type="number" name="cost_amount" min="1">
-          <label for="resources_earned">Resource Earned:</label>
-          <select name="resources_earned">
-            {% for resource in player_data.Resources.keys() %}
-              <option value="{{ resource }}">{{ resource }}</option>
-            {% endfor %}
-          </select>
-          <input type="number" name="earned_amount" min="1">
-          <button name="add_trade_offer" type="submit">Create Trade</button>
-        </form>
-      </div>
-    {% endif %}
-
-    <!-- Quests Section -->
-    <h2>📜 Quests</h2>
-    <div>
-      {% for quest in player_data.Quests %}
-      <div class="quest-box" style="background-color: {{ quest.completed and 'green' or 'white' }};">
+<!-- Hidden panel for Quests that slides in/out -->
+<div id="quest-panel">
+  <h2>📜 Quests</h2>
+  <div>
+    {% for quest in player_data.Quests %}
+      <div class="quest-box" style="background-color: {{ quest.completed and 'lightgreen' or 'white' }};">
         <p class="quest-text">{{ quest.text }}</p>
         <p class="quest-reward" data-reward="{{ quest.reward }}">Reward:</p>
         <p class="quest-status">Status: {{ quest.completed and "Completed" or "In Progress" }}</p>
       </div>
     {% endfor %}
+  </div>
+</div>
+
+<!-- The main game container with tabs -->
+<div class="tab-container">
+  <!-- TAB HEADERS -->
+  <div class="tab-header">
+    <!-- The "Village" tab is the default/active -->
+    <div data-tab="village" class="active" onclick="showTab('village')">Village</div>
+    
+    <!-- The "Castle" tab -->
+    <div data-tab="castle" onclick="showTab('castle')">Castle</div>
+    
+    <!-- Dynamically show tab for each building if it exists and level > 0, skipping "Castle" since it has its own tab -->
+    {% for building, details in game_config.Buildings.items() %}
+      {% if building != "Castle" and player_data.Buildings.levels[building] > 0 %}
+        <div data-tab="{{ building|replace(' ', '_') }}" onclick="showTab('{{ building|replace(' ', '_') }}')">
+          {{ building }}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <!-- TAB CONTENT -->
+  <div class="tab-content">
+    <!-- Village Tab Pane -->
+    <div id="tab-village" class="tab-pane active">
+      <h2>Welcome to your Village</h2>
+      <p>This tab can contain an overview of your village, key stats, etc.</p>
+      <h3>Quick Navigation</h3>
+      <ul>
+        <li><a href="javascript:void(0)" onclick="showTab('castle')">Go to Castle (Upgrades)</a></li>
+        {% for building, details in game_config.Buildings.items() %}
+          {% if building != "Castle" and player_data.Buildings.levels[building] > 0 %}
+            <li>
+              <a href="javascript:void(0)" 
+                 onclick="showTab('{{ building|replace(' ', '_') }}')">
+                Go to {{ building }}
+              </a>
+            </li>
+          {% endif %}
+        {% endfor %}
+      </ul>
     </div>
 
+    <!-- Castle Tab Pane: building upgrades handled here -->
+    <div id="tab-castle" class="tab-pane">
+      <h2>🏰 Castle: Level {{ player_data.Buildings.levels.Castle }}</h2>
+      <h5>{{ game_config.Buildings.Castle.description }}</h5>
 
-  </body>
+      <h3>Upgrade a Building</h3>
+      <form method="POST">
+        <select name="building_type">
+          {% for building, details in game_config.Buildings.items() %}
+            {% if player_data.Buildings.levels[building] >= details.max_level %}
+              <option value="{{ building }}" disabled>{{ building }} - Max Level</option>
+            {% else %}
+              {% set upgrade_cost = [] %}
+              {% for resource, cost in details.cost.items() %}
+                {% set new_cost = cost * (game_config.game_speed_and_multiplier.building_upgrade_cost_multiplier ** player_data.Buildings.levels[building]) %}
+                {% set rounded_cost = new_cost|round(method='ceil')|int %}
+                {% set _ = upgrade_cost.append(resource ~ ": " ~ rounded_cost) %}
+              {% endfor %}
+              <option value="{{ building }}">
+                {{ building }} - Upgrade to Level {{ player_data.Buildings.levels[building] + 1 }}:
+                {{ upgrade_cost | join(", ") }}
+              </option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        <button class="btn" name="purchase_building" type="submit">Upgrade</button>
+      </form>
+
+      <h4>Ongoing Building Upgrades</h4>
+      {% for building, details in game_config.Buildings.items() %}
+        {% set ongoing_builds = player_data.Buildings.ongoing_builds %}
+        {% for ongoing in ongoing_builds %}
+          {% if ongoing.building == building %}
+            <div class="progress-container">
+              <div class="progress-bar" style="width: {{ ongoing.progress * 100 }}%">
+                {{ building }} {{ "%.0f"|format(ongoing.progress * 100) }}%
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </div>
+    
+    <!-- For each resource/building-specific tab -->
+    {% for building, details in game_config.Buildings.items() %}
+      {% if building != "Castle" and player_data.Buildings.levels[building] > 0 %}
+      <div id="tab-{{ building|replace(' ', '_') }}" class="tab-pane">
+        <h2>{{ building }}: Level {{ player_data.Buildings.levels[building] }}</h2>
+        <h5>{{ details.description }}</h5>
+        
+        {# Example logic for resource buildings #}
+        {% if building == "Lumber Mill" %}
+          <p>🪵 Wood: {{ "%.0f"|format(player_data.Resources.Wood) }}</p>
+          {% set tasks = player_data.Buildings.ongoing_resources_collection 
+                        | selectattr("building", "equalto", "Lumber Mill") | list %}
+          <p>Woodcutters: {{ tasks|length > 0 and tasks|sum(attribute='number_of_workers') or 0 }}</p>
+          {% if tasks|length > 0 %}
+            {% for task in tasks %}
+              <div class="progress-container">
+                <div class="progress-bar" style="width: {{ task.progress * 100 }}%">
+                  {{ "%.0f"|format(task.progress * 100) }}%
+                </div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="progress-container">
+              <div class="progress-bar" style="width: 0%">0%</div>
+            </div>
+          {% endif %}
+          <form method="POST">
+            <input type="hidden" name="building_type" value="Lumber Mill">
+            <button class="btn" name="add_worker" type="submit">Add Woodcutter</button>
+            <button class="btn" name="remove_worker" type="submit">Remove Woodcutter</button>
+          </form>
+        
+          {% elif building == "Quarry" %}
+          <!-- Quarry -->
+          <p>⛏️ Stone: {{ "%.0f"|format(player_data.Resources.Stone) }}</p>
+          {% set tasks = player_data.Buildings.ongoing_resources_collection 
+                        | selectattr("building", "equalto", "Quarry") | list %}
+          <p>Stone Miners: {{ tasks|length > 0 and tasks|sum(attribute='number_of_workers') or 0 }}</p>
+          {% if tasks|length > 0 %}
+            {% for task in tasks %}
+              <div class="progress-container">
+                <div class="progress-bar" style="width: {{ task.progress * 100 }}%">
+                  {{ "%.0f"|format(task.progress * 100) }}%
+                </div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="progress-container">
+              <div class="progress-bar" style="width: 0%">0%</div>
+            </div>
+          {% endif %}
+          <form method="POST">
+            <input type="hidden" name="building_type" value="Quarry">
+            <button class="btn" name="add_worker" type="submit">Add Stone Miner</button>
+            <button class="btn" name="remove_worker" type="submit">Remove Stone Miner</button>
+          </form>
+        
+        {% elif building == "Mines" %}
+          <!-- Mines -->
+          <p>🔗 Iron: {{ "%.0f"|format(player_data.Resources.Iron) }}</p>
+          <p>🟡 Gold: {{ "%.0f"|format(player_data.Resources.Gold) }}</p>
+          <p>💎 Diamond: {{ "%.0f"|format(player_data.Resources.Diamond) }}</p>
+          {% set tasks = player_data.Buildings.ongoing_resources_collection 
+                        | selectattr("building", "equalto", "Mines") | list %}
+          <p>Miners: {{ tasks|length > 0 and tasks|sum(attribute='number_of_workers') or 0 }}</p>
+          {% if tasks|length > 0 %}
+            {% for task in tasks %}
+              <div class="progress-container">
+                <div class="progress-bar" style="width: {{ task.progress * 100 }}%">
+                  {{ "%.0f"|format(task.progress * 100) }}%
+                </div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="progress-container">
+              <div class="progress-bar" style="width: 0%">0%</div>
+            </div>
+          {% endif %}
+          <form method="POST">
+            <input type="hidden" name="building_type" value="Mines">
+            <button class="btn" name="add_worker" type="submit">Add Miner</button>
+            <button class="btn" name="remove_worker" type="submit">Remove Miner</button>
+          </form>
+        
+        {% elif building == "Farm" %}
+          <!-- Farm -->
+          <p>🌾 Wheat: {{ "%.0f"|format(player_data.Resources.Wheat) }}</p>
+          {% set tasks = player_data.Buildings.ongoing_resources_collection 
+                        | selectattr("building", "equalto", "Farm") | list %}
+          <p>Farmers: {{ tasks|length > 0 and tasks|sum(attribute='number_of_workers') or 0 }}</p>
+          {% if tasks|length > 0 %}
+            {% for task in tasks %}
+              <div class="progress-container">
+                <div class="progress-bar" style="width: {{ task.progress * 100 }}%">
+                  {{ "%.0f"|format(task.progress * 100) }}%
+                </div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="progress-container">
+              <div class="progress-bar" style="width: 0%">0%</div>
+            </div>
+          {% endif %}
+          <form method="POST">
+            <input type="hidden" name="building_type" value="Farm">
+            <button class="btn" name="add_worker" type="submit">Add Farmer</button>
+            <button class="btn" name="remove_worker" type="submit">Remove Farmer</button>
+          </form>
+        
+          {% elif building == "Barracks" %}
+          <!-- Barracks -->
+          <p>Soldiers: {{ player_data.Units.count["Barracks/Soldier"] }}</p>
+          <p>Archers: {{ player_data.Units.count["Barracks/Archer"] }}</p>
+      
+          <h3>Training</h3>
+          <form method="POST">
+              <select name="unit_type">
+                  {% for unit, unit_details in game_config.Units.items() %}
+                      {% if unit_details.building_source == "Barracks" %}
+                          {% set curr_level = player_data.Units.levels[unit] %}
+                          {% set cost_list = [] %}
+                          {% for resource, cost in unit_details.cost.items() %}
+                              {% set new_cost = cost * (game_config.game_speed_and_multiplier.unit_upgrade_cost_multiplier ** (curr_level - 1)) %}
+                              {% set rounded_cost = new_cost|round(method='ceil')|int %}
+                              {% set _ = cost_list.append(resource ~ ": " ~ rounded_cost) %}
+                          {% endfor %}
+                          <option value="{{ unit }}">{{ unit }} - {{ cost_list|join(", ") }}</option>
+                      {% endif %}
+                  {% endfor %}
+              </select>
+              <button class="btn" name="purchase_unit" type="submit">Purchase Unit</button>
+          </form>
+      
+          <!-- Recruitment Progress Display -->
+          {% set barracks_units = game_config.Units | dictsort %}
+          {% for unit, unit_details in barracks_units %}
+              {% if unit_details.building_source == "Barracks" %}
+                  {% set ongoing_tasks = player_data.Units.ongoing_recruitments | selectattr("unit", "equalto", unit)|list %}
+                  {% set queued_tasks = player_data.Units.queued_recruitments | selectattr("unit", "equalto", unit)|list %}
+                  
+                  {% for recruitment in ongoing_tasks %}
+                      <div class="progress-container">
+                          <div class="progress-bar" style="width: {{ recruitment.progress * 100 }}%">
+                              {{ "%.0f"|format(recruitment.progress * 100) }}% - Training 1 {{ unit }}
+                          </div>
+                      </div>
+                  {% endfor %}
+                  
+                  {% if queued_tasks|length > 0 %}
+                      <p>{{ queued_tasks|length }} {{ unit }} queued</p>
+                  {% endif %}
+              {% endif %}
+          {% endfor %}
+      
+      {% elif building == "Stables" %}
+          <!-- Stables -->
+          <p>Cavalry: {{ player_data.Units.count["Stables/Calvary"] }}</p>
+      
+          <h3>Training</h3>
+          <form method="POST">
+              <select name="unit_type">
+                  {% for unit, unit_details in game_config.Units.items() %}
+                      {% if unit_details.building_source == "Stables" %}
+                          {% set curr_level = player_data.Units.levels[unit] %}
+                          {% set cost_list = [] %}
+                          {% for resource, cost in unit_details.cost.items() %}
+                              {% set new_cost = cost * (game_config.game_speed_and_multiplier.unit_upgrade_cost_multiplier ** (curr_level - 1)) %}
+                              {% set rounded_cost = new_cost|round(method='ceil')|int %}
+                              {% set _ = cost_list.append(resource ~ ": " ~ rounded_cost) %}
+                          {% endfor %}
+                          <option value="{{ unit }}">{{ unit }} - {{ cost_list|join(", ") }}</option>
+                      {% endif %}
+                  {% endfor %}
+              </select>
+              <button class="btn" name="purchase_unit" type="submit">Purchase Unit</button>
+          </form>
+      
+          <!-- Recruitment Progress Display -->
+          {% set stable_units = game_config.Units | dictsort %}
+          {% for unit, unit_details in stable_units %}
+              {% if unit_details.building_source == "Stables" %}
+                  {% set ongoing_tasks = player_data.Units.ongoing_recruitments | selectattr("unit", "equalto", unit)|list %}
+                  {% set queued_tasks = player_data.Units.queued_recruitments | selectattr("unit", "equalto", unit)|list %}
+                  
+                  {% for recruitment in ongoing_tasks %}
+                      <div class="progress-container">
+                          <div class="progress-bar" style="width: {{ recruitment.progress * 100 }}%">
+                              Training 1 {{ unit }} – {{ "%.0f"|format(recruitment.progress * 100) }}%
+                          </div>
+                      </div>
+                  {% endfor %}
+      
+                  {% if queued_tasks|length > 0 %}
+                      <p>{{ queued_tasks|length }} {{ unit }} queued</p>
+                  {% endif %}
+              {% endif %}
+          {% endfor %}
+      
+      {% elif building == "Dock" %}
+          <!-- Dock -->
+          <p>Ships: {{ player_data.Units.count["Dock.Boat"] }}</p>
+      
+          <h3>Shipyard</h3>
+          <form method="POST">
+              <select name="unit_type">
+                  {% for unit, unit_details in game_config.Units.items() %}
+                      {% if unit_details.building_source == "Dock" %}
+                          {% set curr_level = player_data.Units.levels[unit] %}
+                          {% set cost_list = [] %}
+                          {% for resource, cost in unit_details.cost.items() %}
+                              {% set new_cost = cost * (game_config.game_speed_and_multiplier.unit_upgrade_cost_multiplier ** (curr_level - 1)) %}
+                              {% set rounded_cost = new_cost|round(method='ceil')|int %}
+                              {% set _ = cost_list.append(resource ~ ": " ~ rounded_cost) %}
+                          {% endfor %}
+                          <option value="{{ unit }}">{{ unit }} - {{ cost_list|join(", ") }}</option>
+                      {% endif %}
+                  {% endfor %}
+              </select>
+              <button class="btn" name="purchase_unit" type="submit">Purchase Unit</button>
+          </form>
+      
+          <!-- Recruitment Progress Display -->
+          {% set dock_units = game_config.Units | dictsort %}
+          {% for unit, unit_details in dock_units %}
+              {% if unit_details.building_source == "Dock" %}
+                  {% set ongoing_tasks = player_data.Units.ongoing_recruitments | selectattr("unit", "equalto", unit)|list %}
+                  {% set queued_tasks = player_data.Units.queued_recruitments | selectattr("unit", "equalto", unit)|list %}
+                  
+                  {% for recruitment in ongoing_tasks %}
+                      <div class="progress-container">
+                          <div class="progress-bar" style="width: {{ recruitment.progress * 100 }}%">
+                              Building 1 {{ unit }} – {{ "%.0f"|format(recruitment.progress * 100) }}%
+                          </div>
+                      </div>
+                  {% endfor %}
+      
+                  {% if queued_tasks|length > 0 %}
+                      <p>{{ queued_tasks|length }} {{ unit }} queued</p>
+                  {% endif %}
+              {% endif %}
+          {% endfor %}
+        
+        {% elif building == "Market" %}
+          <!-- Market -->
+          <!-- Display existing trade offers -->
+          <div>
+            {% for trade in trades %}
+              <div class="quest-box">
+                <p>Trade Offer by {{ trade.source_player }}</p>
+                <p>Cost:
+                  {% for resource, amount in trade.resources_cost.items() %}
+                    {{ resource }}: {{ amount }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                </p>
+                <p>Earn:
+                  {% for resource, amount in trade.resources_earned.items() %}
+                    {{ resource }}: {{ amount }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                </p>
+                {% if trade.source_player == player_data["Player Name"] %}
+                  <form method="POST">
+                    <input type="hidden" name="trade_index" value="{{ loop.index0 }}">
+                    <button class="btn" name="remove_trade_offer" type="submit">
+                      Remove Trade Offer
+                    </button>
+                  </form>
+                {% else %}
+                  <form method="POST">
+                    <input type="hidden" name="trade_index" value="{{ loop.index0 }}">
+                    <button class="btn" name="accept_trade_offer" type="submit">
+                      Make Trade
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <!-- Create New Trade -->
+          <div style="margin-top: 20px;">
+            <h3>Create New Trade</h3>
+            <form method="POST">
+              <label for="resources_cost">Resource Cost:</label>
+              <select name="resources_cost">
+                {% for resource in player_data.Resources.keys() %}
+                  <option value="{{ resource }}">{{ resource }}</option>
+                {% endfor %}
+              </select>
+              <input type="number" name="cost_amount" min="1">
+        
+              <label for="resources_earned">Resource Earned:</label>
+              <select name="resources_earned">
+                {% for resource in player_data.Resources.keys() %}
+                  <option value="{{ resource }}">{{ resource }}</option>
+                {% endfor %}
+              </select>
+              <input type="number" name="earned_amount" min="1">
+        
+              <button class="btn" name="add_trade_offer" type="submit">Create Trade</button>
+            </form>
+          </div>
+        
+        {% elif building == "Smithy" %}
+          <!-- Smithy -->
+          <h3>Unit Upgrades</h3>
+          <form method="POST">
+            <select name="unit_type">
+              {% for unit, unit_details in game_config.Units.items() %}
+                {% if player_data.Units.levels[unit] >= unit_details.max_level %}
+                  <option value="{{ unit }}" disabled>{{ unit }} - Max Level</option>
+                {% else %}
+                  {% set upgrade_cost = [] %}
+                  {% for resource, cost in unit_details.upgrade_cost.items() %}
+                    {% set new_cost = cost * (game_config.game_speed_and_multiplier.unit_upgrade_cost_multiplier 
+                                              ** player_data.Units.levels[unit]) %}
+                    {% set rounded_cost = new_cost|round(method='ceil')|int %}
+                    {% set _ = upgrade_cost.append(resource ~ ": " ~ rounded_cost) %}
+                  {% endfor %}
+                  <option value="{{ unit }}">
+                    {{ unit }} - Upgrade to Level {{ player_data.Units.levels[unit] + 1 }}: 
+                    {{ upgrade_cost | join(", ") }}
+                  </option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            <button class="btn" name="upgrade_unit" type="submit">Upgrade Unit</button>
+          </form>
+          <!-- Ongoing upgrade progress -->
+          {% if player_data.Units.ongoing_upgrades %}
+            {% set ongoing_upg = player_data.Units.ongoing_upgrades %}
+            <div class="progress-container">
+              <div class="progress-bar" style="width: {{ ongoing_upg.progress * 100 }}%">
+                Upgrading {{ ongoing_upg.unit }} — {{ "%.0f"|format(ongoing_upg.progress * 100) }}%
+              </div>
+            </div>
+          {% endif %}
+        {% endif %}
+      </div>
+      {% endif %}
+    {% endfor %}
+    
+  </div> <!-- End of tab-content -->
+</div> <!-- End of tab-container -->
+
+</body>
 </html>

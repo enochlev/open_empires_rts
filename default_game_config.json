@@ -433,7 +433,7 @@
 
     "game_speed_and_multiplier":
     {
-        "global_speed": 100.0,
+        "global_speed": 500.0,
         "building_speed": 1.0, 
         "unit_speed": 1.0,
         "resource_speed": 1.0,

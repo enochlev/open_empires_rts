@@ -423,5 +423,5 @@ def dashboard():
 
 if __name__ == '__main__':
     app.register_blueprint(empire_game_bp)
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    app.run(host='0.0.0.0', port=8000, debug=False)
 #https://chat.openai.com/share/c680c458-34b7-4287-b80c-5f3b1b21d50e
