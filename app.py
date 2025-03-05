@@ -1,16 +1,22 @@
-from flask import Flask, render_template, request, redirect, url_for, session, Blueprint, flash
+
 #from player import Player, quests, global_trades,game_config
-from app.db_utils import game_config, GameAPI, PlayerAPI
+
 import os
 import json
 import smtplib
 import dotenv
-dotenv.load_dotenv()
 import datetime
 import os
 import base64
-from werkzeug.security import generate_password_hash, check_password_hash
 import time
+
+
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, render_template, request, redirect, url_for, session, Blueprint, flash
+
+
+from app.db_utils import game_config, GameAPI, PlayerAPI
+dotenv.load_dotenv()
 
 SPEED = 3.5
 
