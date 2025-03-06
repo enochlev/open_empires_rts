@@ -393,61 +393,99 @@
         {% elif building == "Market" %}
           <!-- Market -->
           <!-- Display existing trade offers -->
-          <div>
-            {% for trade in trades %}
-              <div class="quest-box">
-                <p>Trade Offer by {{ trade.source_player }}</p>
-                <p>Cost:
-                  {% for resource, amount in trade.resources_cost.items() %}
-                    {{ resource }}: {{ amount }}{% if not loop.last %}, {% endif %}
-                  {% endfor %}
-                </p>
-                <p>Earn:
-                  {% for resource, amount in trade.resources_earned.items() %}
-                    {{ resource }}: {{ amount }}{% if not loop.last %}, {% endif %}
-                  {% endfor %}
-                </p>
-                {% if trade.source_player == player_data["Player Name"] %}
-                  <form method="POST">
-                    <input type="hidden" name="trade_index" value="{{ loop.index0 }}">
-                    <button class="btn" name="remove_trade_offer" type="submit">
-                      Remove Trade Offer
-                    </button>
-                  </form>
+          <div class="trade-section">
+            <!-- 1. New Trade Offer -->
+            <div class="trade-subsection">
+                <h3>Create Trade Offer</h3>
+                <p>You have {{ player_data.Buildings.levels.Market - player_data.Trades|length }} available trade slots.</p>
+                <form method="POST" class="trade-row">
+                    <!-- Left Side: Earned Resource -->
+                    <div class="trade-detail">
+                        <label><strong>You Offer (Earned):</strong></label>
+                        <select name="resources_cost" required>
+                            {% for resource in game_config.Resources.keys() %}
+                                <option value="{{ resource }}">{{ resource }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="number" name="cost_amount" placeholder="Amount" min="1" required>
+                    </div>
+        
+                    <!-- Right Side: Desired Resource -->
+                    <div class="trade-detail">
+                        <label><strong>You Want (Desired):</strong></label>
+                        <select name="resources_earned" required>
+                            {% for resource in game_config.Resources.keys() %}
+                                <option value="{{ resource }}">{{ resource }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="number" name="earned_amount" placeholder="Amount" min="1" required>
+                    </div>
+        
+                    <button class="btn" name="add_trade_offer" type="submit">Create Trade</button>
+                </form>
+            </div>
+        
+            <!-- 2. Your Current Trades -->
+            <div class="trade-subsection">
+                <h3>Your Trade Offers</h3>
+                {% set your_trades = player_data.Trades|selectattr("source_player", "equalto", player_data["Player ID"])|list %}
+                {% if your_trades %}
+                    {% for trade in your_trades %}
+                        <div class="trade-row">
+                            <div class="trade-detail">
+                                <strong>You Offer:</strong>
+                                {% for resource, amount in trade.resources_earned.items() %}
+                                    {{ amount }} {{ resource }}
+                                {% endfor %}
+                            </div>
+                            <div class="trade-detail">
+                                <strong>You Want:</strong>
+                                {% for resource, amount in trade.resources_cost.items() %}
+                                    {{ amount }} {{ resource }}
+                                {% endfor %}
+                            </div>
+                            <form method="POST">
+                                <input type="hidden" name="trade_index" value="{{ trade.id }}">
+                                <button class="btn" name="remove_trade_offer" type="submit">Cancel Trade</button>
+                            </form>
+                        </div>
+                    {% endfor %}
                 {% else %}
-                  <form method="POST">
-                    <input type="hidden" name="trade_index" value="{{ loop.index0 }}">
-                    <button class="btn" name="accept_trade_offer" type="submit">
-                      Make Trade
-                    </button>
-                  </form>
+                    <p>No current trade offers.</p>
                 {% endif %}
-              </div>
-            {% endfor %}
-          </div>
-          <!-- Create New Trade -->
-          <div style="margin-top: 20px;">
-            <h3>Create New Trade</h3>
-            <form method="POST">
-              <label for="resources_cost">Resource Cost:</label>
-              <select name="resources_cost">
-                {% for resource in player_data.Resources.keys() %}
-                  <option value="{{ resource }}">{{ resource }}</option>
-                {% endfor %}
-              </select>
-              <input type="number" name="cost_amount" min="1">
+            </div>
         
-              <label for="resources_earned">Resource Earned:</label>
-              <select name="resources_earned">
-                {% for resource in player_data.Resources.keys() %}
-                  <option value="{{ resource }}">{{ resource }}</option>
-                {% endfor %}
-              </select>
-              <input type="number" name="earned_amount" min="1">
-        
-              <button class="btn" name="add_trade_offer" type="submit">Create Trade</button>
-            </form>
-          </div>
+            <!-- 3. Other Players' Trades -->
+            <div class="trade-subsection">
+                <h3>Available Trade Offers</h3>
+                {% set other_trades = player_data.Trades|selectattr("source_player", "ne", player_data["Player ID"])|list %}
+                {% if other_trades %}
+                    {% for trade in other_trades %}
+                        <div class="trade-row">
+                            <div class="trade-detail">
+                                <strong>{{ trade.source_player }} Offers:</strong>
+                                {% for resource, amount in trade.resources_earned.items() %}
+                                    {{ amount }} {{ resource }}
+                                {% endfor %}
+                            </div>
+                            <div class="trade-detail">
+                                <strong>{{ trade.source_player }} Wants:</strong>
+                                {% for resource, amount in trade.resources_cost.items() %}
+                                    {{ amount }} {{ resource }}
+                                {% endfor %}
+                            </div>
+                            <form method="POST">
+                                <input type="hidden" name="trade_index" value="{{ trade.id }}">
+                                <button class="btn" name="accept_trade_offer" type="submit">Accept Trade</button>
+                            </form>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No available trade offers from other players.</p>
+                {% endif %}
+            </div>
+        </div>
+          
         
         {% elif building == "Smithy" %}
           <!-- Smithy -->
