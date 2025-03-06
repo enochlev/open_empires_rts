@@ -96,29 +96,44 @@ background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/s
 }
 
 /* Progress bars */
+/* Progress bars container */
 .progress-container {
     width: 300pt;
     background-color: #ddd;
     height: 20px;
     position: relative;
     margin-bottom: 10px;
+    overflow: hidden;
+    border-radius: 4px; /* optional: rounded corners */
 }
+
+/* Progress bar indicator */
 .progress-bar {
     height: 100%;
     background-color: #4CAF50;
-    text-align: center;
-    line-height: 20px;
-    color: white;
     position: absolute;
     top: 0;
     left: 0;
-    white-space: nowrap;       /* prevents text from wrapping */
-    overflow: hidden;          /* hides overflowing text */
-    text-overflow: ellipsis;   /* adds ellipsis (...) if text is too long */
-    padding: 0 5px;            /* a bit of horizontal padding to look nicer */
-    box-sizing: border-box;    /* ensures padding doesn't break layout */
+    box-sizing: border-box;
+    transition: width 0.3s ease-in-out;
 }
 
+/* Progress bar text centered over the bar/container */
+.progress-text {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    text-align: center;
+    line-height: 20px;
+    color: #000; /* black or suitable dark color for readability */
+    z-index: 2;
+    pointer-events: none; /* text will not interfere mouse events */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 /* Quest elements */
 .quest-box {
