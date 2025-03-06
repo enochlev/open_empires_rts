@@ -75,15 +75,19 @@
       <p>This tab can contain an overview of your village, key stats, etc.</p>
       <h3>Quick Navigation</h3>
       <ul>
-        <li><a href="javascript:void(0)" onclick="showTab('castle')">Go to Castle (Upgrades)</a></li>
+        <li>
+          <a href="javascript:void(0)" onclick="showTab('castle');">
+            Go to Castle (Upgrades)
+          </a>
+        </li>
         {% for building, details in game_config.Buildings.items() %}
           {% if building != "Castle" and player_data.Buildings.levels[building] > 0 %}
-            <li>
-              <a href="javascript:void(0)" 
-                 onclick="showTab('{{ building|replace(' ', '_') }}')">
-                Go to {{ building }}
-              </a>
-            </li>
+          <li>
+            <a href="javascript:void(0)" 
+               onclick="showTab('{{ building|replace(' ', '_') }}');">
+              Go to {{ building }}
+            </a>
+          </li>
           {% endif %}
         {% endfor %}
       </ul>
@@ -123,8 +127,9 @@
         {% for ongoing in ongoing_builds %}
           {% if ongoing.building == building %}
             <div class="progress-container">
-              <div class="progress-bar" style="width: {{ ongoing.progress * 100 }}%">
-                {{ building }} {{ "%.0f"|format(ongoing.progress * 100) }}%
+              <div class="progress-bar" style="width: {{ ongoing.progress * 100 }}%;"></div>
+              <div class="progress-text">
+              {{ building }} {{ "%.0f"|format(ongoing.progress * 100) }}%
               </div>
             </div>
           {% endif %}
@@ -145,19 +150,21 @@
           {% set tasks = player_data.Buildings.ongoing_resources_collection 
                         | selectattr("building", "equalto", "Lumber Mill") | list %}
           <p>Woodcutters: {{ tasks|length > 0 and tasks|sum(attribute='number_of_workers') or 0 }}</p>
-          {% if tasks|length > 0 %}
+            {% if tasks|length > 0 %}
             {% for task in tasks %}
               <div class="progress-container">
-                <div class="progress-bar" style="width: {{ task.progress * 100 }}%">
-                  {{ "%.0f"|format(task.progress * 100) }}%
-                </div>
+              <div class="progress-bar" style="width: {{ task.progress * 100 }}%;"></div>
+              <div class="progress-text">
+                {{ "%.0f"|format(task.progress * 100) }}%
+              </div>
               </div>
             {% endfor %}
-          {% else %}
+            {% else %}
             <div class="progress-container">
-              <div class="progress-bar" style="width: 0%">0%</div>
+              <div class="progress-bar" style="width: 0%;"></div>
+              <div class="progress-text">0%</div>
             </div>
-          {% endif %}
+            {% endif %}
           <form method="POST">
             <input type="hidden" name="building_type" value="Lumber Mill">
             <button class="btn" name="add_worker" type="submit">Add Woodcutter</button>
@@ -173,14 +180,16 @@
           {% if tasks|length > 0 %}
             {% for task in tasks %}
               <div class="progress-container">
-                <div class="progress-bar" style="width: {{ task.progress * 100 }}%">
+                <div class="progress-bar" style="width: {{ task.progress * 100 }}%;"></div>
+                <div class="progress-text">
                   {{ "%.0f"|format(task.progress * 100) }}%
                 </div>
               </div>
             {% endfor %}
           {% else %}
             <div class="progress-container">
-              <div class="progress-bar" style="width: 0%">0%</div>
+              <div class="progress-bar" style="width: 0%;"></div>
+              <div class="progress-text">0%</div>
             </div>
           {% endif %}
           <form method="POST">
@@ -200,14 +209,16 @@
           {% if tasks|length > 0 %}
             {% for task in tasks %}
               <div class="progress-container">
-                <div class="progress-bar" style="width: {{ task.progress * 100 }}%">
+                <div class="progress-bar" style="width: {{ task.progress * 100 }}%;"></div>
+                <div class="progress-text">
                   {{ "%.0f"|format(task.progress * 100) }}%
                 </div>
               </div>
             {% endfor %}
           {% else %}
             <div class="progress-container">
-              <div class="progress-bar" style="width: 0%">0%</div>
+              <div class="progress-bar" style="width: 0%;"></div>
+              <div class="progress-text">0%</div>
             </div>
           {% endif %}
           <form method="POST">
@@ -225,14 +236,16 @@
           {% if tasks|length > 0 %}
             {% for task in tasks %}
               <div class="progress-container">
-                <div class="progress-bar" style="width: {{ task.progress * 100 }}%">
+                <div class="progress-bar" style="width: {{ task.progress * 100 }}%;"></div>
+                <div class="progress-text">
                   {{ "%.0f"|format(task.progress * 100) }}%
                 </div>
               </div>
             {% endfor %}
           {% else %}
             <div class="progress-container">
-              <div class="progress-bar" style="width: 0%">0%</div>
+              <div class="progress-bar" style="width: 0%;"></div>
+              <div class="progress-text">0%</div>
             </div>
           {% endif %}
           <form method="POST">
@@ -274,9 +287,10 @@
                   
                   {% for recruitment in ongoing_tasks %}
                       <div class="progress-container">
-                          <div class="progress-bar" style="width: {{ recruitment.progress * 100 }}%">
-                              {{ "%.0f"|format(recruitment.progress * 100) }}% - Training 1 {{ unit }}
-                          </div>
+                        <div class="progress-bar" style="width: {{ recruitment.progress * 100 }}%;"></div>
+                        <div class="progress-text">
+                          {{ "%.0f"|format(recruitment.progress * 100) }}% - Training 1 {{ unit }}
+                        </div>
                       </div>
                   {% endfor %}
                   
@@ -318,9 +332,10 @@
                   
                   {% for recruitment in ongoing_tasks %}
                       <div class="progress-container">
-                          <div class="progress-bar" style="width: {{ recruitment.progress * 100 }}%">
-                              Training 1 {{ unit }} – {{ "%.0f"|format(recruitment.progress * 100) }}%
-                          </div>
+                        <div class="progress-bar" style="width: {{ recruitment.progress * 100 }}%;"></div>
+                        <div class="progress-text">
+                          {{ "%.0f"|format(recruitment.progress * 100) }}% - Training 1 {{ unit }}
+                        </div>
                       </div>
                   {% endfor %}
       
@@ -361,11 +376,12 @@
                   {% set queued_tasks = player_data.Units.queued_recruitments | selectattr("unit", "equalto", unit)|list %}
                   
                   {% for recruitment in ongoing_tasks %}
-                      <div class="progress-container">
-                          <div class="progress-bar" style="width: {{ recruitment.progress * 100 }}%">
-                              Building 1 {{ unit }} – {{ "%.0f"|format(recruitment.progress * 100) }}%
+                        <div class="progress-container">
+                          <div class="progress-bar" style="width: {{ recruitment.progress * 100 }}%;"></div>
+                          <div class="progress-text">
+                            {{ "%.0f"|format(recruitment.progress * 100) }}% - Building 1 {{ unit }}
                           </div>
-                      </div>
+                        </div>
                   {% endfor %}
       
                   {% if queued_tasks|length > 0 %}
@@ -462,8 +478,9 @@
           {% if player_data.Units.ongoing_upgrades %}
             {% set ongoing_upg = player_data.Units.ongoing_upgrades %}
             <div class="progress-container">
-              <div class="progress-bar" style="width: {{ ongoing_upg.progress * 100 }}%">
-                Upgrading {{ ongoing_upg.unit }} — {{ "%.0f"|format(ongoing_upg.progress * 100) }}%
+              <div class="progress-bar" style="width: {{ ongoing_upg.progress * 100 }}%;"></div>
+              <div class="progress-text">
+              Upgrading {{ ongoing_upg.unit }} — {{ "%.0f"|format(ongoing_upg.progress * 100) }}%
               </div>
             </div>
           {% endif %}

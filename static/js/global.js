@@ -35,22 +35,25 @@ document.addEventListener("DOMContentLoaded", function() {
   /* SIMPLE TAB SWITCHING */
   /***********************/
   function showTab(tabName) {
-      // Deactivate all tabs
-      const tabs = document.querySelectorAll('.tab-header div[data-tab]');
-      tabs.forEach(tab => tab.classList.remove('active'));
+    // Immediately store the active tab
+    sessionStorage.setItem('activeTab', tabName);
+    
+    // Deactivate all tabs
+    const tabs = document.querySelectorAll('.tab-header div[data-tab]');
+    tabs.forEach(tab => tab.classList.remove('active'));
 
-      // Deactivate all content panes
-      const panes = document.querySelectorAll('.tab-content .tab-pane');
-      panes.forEach(pane => pane.classList.remove('active'));
+    // Deactivate all content panes
+    const panes = document.querySelectorAll('.tab-content .tab-pane');
+    panes.forEach(pane => pane.classList.remove('active'));
 
-      // Activate the target tab header
-      const activeTabHeader = document.querySelector(`.tab-header div[data-tab="${tabName}"]`);
-      if (activeTabHeader) activeTabHeader.classList.add('active');
+    // Activate the target tab header
+    const activeTabHeader = document.querySelector(`.tab-header div[data-tab="${tabName}"]`);
+    if (activeTabHeader) activeTabHeader.classList.add('active');
 
-      // Activate the target content pane
-      const activePane = document.getElementById(`tab-${tabName}`);
-      if (activePane) activePane.classList.add('active');
-  }
+    // Activate the target content pane
+    const activePane = document.getElementById(`tab-${tabName}`);
+    if (activePane) activePane.classList.add('active');
+}
 
   function setupTabs() {
       const storedTab = sessionStorage.getItem('activeTab');
