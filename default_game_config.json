@@ -10,7 +10,7 @@
             "hourly_cost": {
                 "Money": -50
                 },
-            "max_level": 6,
+            "max_level": 10,
             "hours_to_build": 4,
             "starting_level": 1
         },

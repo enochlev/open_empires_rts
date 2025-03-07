@@ -1261,7 +1261,7 @@ class GameAPI:
 
             hours_to_build = game_config["Buildings"][bld_type]["hours_to_build"]
             workers = item["number_of_workers"]
-            upgrade_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_boost_multiplier"]
+            upgrade_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_cost_multiplier"]
             gs = game_config["game_speed_and_multiplier"]["global_speed"]
             bs = game_config["game_speed_and_multiplier"]["building_speed"]
 
