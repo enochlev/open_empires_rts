@@ -380,7 +380,12 @@ class PlayerAPI:
         ongoing_building_upgrades = len(self.player_stats["Buildings"]["ongoing_builds"])
         number_of_buildings = sum(self.player_stats["Buildings"]["levels"].values())
         if building_type != "Castle" and number_of_buildings + ongoing_building_upgrades >= self.player_stats["Buildings"]["levels"].get("Castle", 0) * 5:
-            return "Not Enough Castle Level"
+
+            #however if there is exactly one Castle being upgraded in queue, then we can build the building, but if there is more than one Castle being upgraded in queue, then we can't build the building
+            if ongoing_building_upgrades == 5 and sum(1 for val in self.player_stats["Buildings"]["ongoing_builds"] if "Castle" == val.get("building")) >= 1:
+                pass
+            else:
+                return "Not Enough Castle Level"
         
         # Calculate building cost. (Multiply cost by cost multiplier raised to current_level.)
         building_cost = game_config["Buildings"][building_type]["cost"].copy()
@@ -422,13 +427,13 @@ class PlayerAPI:
         if unit_type not in game_config["Units"]:
             return "Not a valid unit type"
         
-        if self.player_stats["Units"]["levels"].get(unit_type, 0) == game_config["Units"][unit_type]["max"]:
+        if self.player_stats["Units"]["levels"].get(unit_type, 0) == game_config["Units"][unit_type]["max_level"]:
             return "Max Level Reached"
         
         # Calculate upgrade (research) cost.
         unit_cost = game_config["Units"][unit_type]["upgrade_cost"].copy()
         unit_level = self.player_stats["Units"]["levels"].get(unit_type, 0)
-        upgrade_multiplier = game_config["Units"][unit_type]["upgrade_multiplier"]
+        upgrade_multiplier = game_config["game_speed_and_multiplier"]["unit_upgrade_cost_multiplier"]
         for resource, cost in unit_cost.items():
             unit_cost[resource] = cost * (upgrade_multiplier ** unit_level)
         
@@ -436,26 +441,32 @@ class PlayerAPI:
             return "Not Enough Resources"
         
         # Deduct the cost.
+        cur = self.db.cursor()
         for resource, cost in unit_cost.items():
-            self.player_stats["Resources"][resource] -= cost
+            cur.execute(f"UPDATE resources SET {resource} = {resource} - {cost} WHERE player_id = ?", (self.player_id,))
         
         # Insert an upgrade (research) task into the production_queue.
-        cur = self.db.cursor()
+        
         cur.execute("""
             INSERT INTO production_queue (player_id, production_type, entity, number_of_workers, progress, status)
             VALUES (?, 'unit_research', ?, 1, 0.0, 'in_progress')
         """, (self.player_id, unit_type))
+        #also create/overwrite unit count of the player to 0 and level to 0, if current unit is being upgraded is 0
+        if unit_level == 0:
+            cur.execute("""
+                INSERT INTO units (player_id, unit_type, count, level)
+                VALUES (?, ?, 0, 0)
+                ON CONFLICT(player_id, unit_type) DO UPDATE SET count=0, level=0
+            """, (self.player_id, unit_type))
+
         self.db.commit()
         
-        self.player_stats["Units"]["ongoing_upgrades"][unit_type] = 0.0
         return "Success"
     
     def number_of_available_workers(self):
         # Calculate available citizens after subtracting those already assigned.
         assigned_workers = 0
         for worker in self.player_stats["Buildings"]["ongoing_resources_collection"]:
-            assigned_workers += worker["number_of_workers"]
-        for worker in self.player_stats["Units"]["ongoing_recruitments"]:
             assigned_workers += worker["number_of_workers"]
 
         for worker in self.player_stats["Buildings"]["ongoing_builds"]:
@@ -551,6 +562,7 @@ class PlayerAPI:
         Subtracts resources_cost (after checking if trade is possible and non‐negative)
         and adds resources_earned.
         """
+        cur = self.db.cursor()
         if not self.trade_possible(resources_cost):
             print("Not enough resources to make trade")
             return "not enough resources to make trade"
@@ -569,12 +581,12 @@ class PlayerAPI:
 
         # Deduct cost from player's resources.
         for resource, cost in resources_cost.items():
-            self.player_stats["Resources"][resource] = self.player_stats["Resources"].get(resource, 0) - cost
-
+            cur.execute(f"UPDATE resources SET {resource} = {resource} - {cost} WHERE player_id = ?", (self.player_id,))
         # Add earned resources.
         for resource, gain in resources_earned.items():
-            self.player_stats["Resources"][resource] = self.player_stats["Resources"].get(resource, 0) + gain
+            cur.execute(f"UPDATE resources SET {resource} = {resource} + {gain} WHERE player_id = ?", (self.player_id,))
 
+        self.db.commit()
         return "Success"
 
     def add_trade_offer(self, resources_cost, resources_earned):
@@ -589,6 +601,11 @@ class PlayerAPI:
                 msg = "resources_cost had a negative value: " + str(resources_cost)
                 print(msg)
                 return msg
+            if resource in [_resource for _resource in resources_earned.keys()]:
+                msg = "Trading Same Resource is not allowed"
+                print(msg)
+                return msg
+
         for resource, value in resources_earned.items():
             if value < 0:
                 msg = "resources_earned had a negative value: " + str(resources_earned)
@@ -617,7 +634,7 @@ class PlayerAPI:
 
         # Lock (subtract) the cost resources from the player.
         for resource, cost in resources_cost.items():
-            self.player_stats["Resources"][resource] = self.player_stats["Resources"].get(resource, 0) - cost
+            cur.execute(f"UPDATE resources SET {resource} = {resource} - {cost} WHERE player_id = ?", (self.player_id,))
 
         # Insert the new trade offer into the DB.
         cur.execute("""
@@ -635,6 +652,8 @@ class PlayerAPI:
         """
         cur = self.db.cursor()
         cur.execute("SELECT * FROM trade_offers WHERE id = ? AND player_id = ?", (offer_id, self.player_id))
+        if False:
+            pd.read_sql_query("SELECT * FROM trade_offers", self.db)
         row = cur.fetchone()
         if not row:
             print("Trade offer not found")
@@ -643,7 +662,7 @@ class PlayerAPI:
         # Refund the locked cost resources back to the player.
         resources_cost = json.loads(row["resources_cost"])
         for resource, cost in resources_cost.items():
-            self.player_stats["Resources"][resource] = self.player_stats["Resources"].get(resource, 0) + cost
+            cur.execute(f"UPDATE resources SET {resource} = {resource} + {cost} WHERE player_id = ?", (self.player_id,))
 
         # Remove the trade offer from the DB.
         cur.execute("DELETE FROM trade_offers WHERE id = ? AND player_id = ?", (offer_id, self.player_id))
@@ -793,7 +812,8 @@ class GameAPI:
                 unit_type TEXT,
                 count INTEGER DEFAULT 0,
                 level INTEGER DEFAULT 0,
-                FOREIGN KEY(player_id) REFERENCES players(player_id)
+                FOREIGN KEY(player_id) REFERENCES players(player_id),
+                UNIQUE(player_id, unit_type)
             );
         """)
         
@@ -1147,7 +1167,8 @@ class GameAPI:
         buildings = cur.execute("SELECT * FROM buildings WHERE player_id = ?", (player_id,)).fetchall()
         building_levels = {b["building_type"]: b["level"] for b in buildings}
         smithy_level = building_levels.get("Smithy", 0)
-        smithy_boost = 1.2 ** smithy_level
+        smithy_boost = 1.2 ** (smithy_level -1 )
+        cost_boost = game_config["game_speed_and_multiplier"]["unit_upgrade_cost_multiplier"]
         
         gs = game_config["game_speed_and_multiplier"]["global_speed"]
         
@@ -1157,12 +1178,14 @@ class GameAPI:
         for task in research_tasks:
             # For research, we assume entity is just the unit name.
             unit_type = task["entity"]
-            if unit_type not in game_config["Units"].keys():
+            curr_level = cur.execute("SELECT level FROM units WHERE player_id = ? AND unit_type = ?", (player_id, unit_type)).fetchone()[0]
+            
+            if unit_type not in list(game_config["Units"].keys()):
                 print("Warning: Unit config not found for research unit", unit_type)
                 continue
             unit_config = game_config["Units"][unit_type]
             # Use a research-specific time if provided; if not, default to hours_to_build.
-            hours_to_research = unit_config.get("hours_to_research", unit_config["hours_to_build"])
+            hours_to_research = unit_config.get("hours_to_research", unit_config["hours_to_build"]) * (cost_boost ** (curr_level))
             # Compute research rate: note that only Smithy and global speed affect research.
             rate = (1.0 / hours_to_research) * smithy_boost * gs
             

@@ -299,39 +299,14 @@ def dashboard():
             resources_cost = {request.form.get('resources_cost'): int(request.form.get('cost_amount'))}
             resources_earned = {request.form.get('resources_earned'): int(request.form.get('earned_amount'))}
             message = player_api.add_trade_offer(resources_cost, resources_earned)
+
         elif 'remove_trade_offer' in request.form:
             trade_index = int(request.form.get('trade_index'))
-            
-            trades = player_data["Trades"]
-            for i in range(len(trades)):
-                if trades[i]["player"] != player_name:
-                    trade_index -= 1
-                else:
-                    break
-
             message = player_api.remove_trade_offer(trade_index)
-
 
         elif 'accept_trade_offer' in request.form:
             trade_index = int(request.form.get('trade_index'))
-            source_player = trades[trade_index]["player"]
-            if source_player == "global":
-                resources_earned = trades[trade_index]["resources_cost"]
-                resources_cost = trades[trade_index]["resources_earned"]
-                message = player.make_trade(resources_cost,resources_earned)
-
-            elif source_player == player_name:
-                #skip
-                pass
-            else:
-                for i in range(len(trades)):
-                    if trades[i]["player"] != source_player:
-                        trade_index -= 1
-                    else:
-                        break
-                players[source_player].accept_offer(trade_index, player)
-                #player.accept_offer(trade_index, players[source_player])
-
+            message = player_api.accept_trade_offer(trade_index)
 
         game_api.update_progress(player_id)
         flash(message)
@@ -397,34 +372,6 @@ def dashboard():
     #             game_data["buildings"].append(building_map[id]) 
 
     return render_template('dashboard.html', player_data=player_data, game_config=game_config, render_data=render_data)
-
-# Additional routes for specific actions like adding/removing miners, managing farms, etc.
-
-# def periodic_task():
-#     for player_ in players:
-#         players[player_].update(SPEED)
-#     save_progress()
-
-# def save_progress():
-#     jsonFile = []
-#     for player in players:
-#         jsonFile.append(players[player].export_player_values())
-    
-#     if len(jsonFile) > 0:
-#         with open("progress.json", "w") as f:
-#             json.dump({'progress':jsonFile}, f)
-    
-#     #randomly backup every 1/100 chance using random
-#     import random
-#     if random.randint(0,100) == 0:
-#         with open("progress_backup.json", "w") as f:
-#             json.dump({'progress':jsonFile}, f)
-
-# from apscheduler.schedulers.background import BackgroundScheduler
-# import atexit
-# scheduler = BackgroundScheduler()
-# scheduler.add_job(func=periodic_task, trigger="interval", seconds=10)
-# scheduler.start()
 
 
 if __name__ == '__main__':

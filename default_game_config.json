@@ -322,7 +322,7 @@
             "max_level": 3,
             "start_amount": 0
         },
-        "Keep.Duke": {
+        "Keep/Duke": {
             "description": "A duke to conquer other villages.",
             "cost": {
                 "Money": 10000,
@@ -346,7 +346,7 @@
             "max_level": 1,
             "start_amount": 0
         },
-        "Dock.Boat": {
+        "Dock/Boat": {
             "description": "A boat used to cary resources and soldiers to other lands.",
             "cost": {
                 "Money": 1000,
@@ -426,7 +426,7 @@
         {"id":7, "text": "Have 8 buildings", "reward": "Resources.Money = 400", "func": "Buildings.Castle >= 8"},
         {"id":8, "text": "Have 15 buildings", "reward": "Resources.Money = 800", "func": "Buildings.Castle >= 15"},
         {"id":9, "text": "Harvest 100 Wood", "reward": "Resources.Money = 200", "func": "Resources.Wood >= 100"},
-        {"id":10, "text": "Forge 2 boats", "reward": "Resources.Money = 600", "func": "Units.Dock.Boat >= 2"},
+        {"id":10, "text": "Forge 2 boats", "reward": "Resources.Money = 600", "func": "Units.Dock/Boat >= 2"},
         {"id":11, "text": "Conscript 5 cavalry", "reward": "Resources.Money = 350", "func": "Units.Stables/Calvary >= 5"},
         {"id":12, "text": "Construct a grand church", "reward": "Resources.Money = 800", "func": "Buildings.Church >= 1"}
     ],
