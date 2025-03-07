@@ -2,3 +2,4 @@ progress.json
 *.db*
 *.pyc
 .env
+*.ipynb

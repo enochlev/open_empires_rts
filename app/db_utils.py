@@ -282,9 +282,11 @@ class PlayerAPI:
         for resource, cost in unit_cost.items():
             unit_cost[resource] = cost * (upgrade_multiplier ** (unit_level - 1))
         
-        # Check if enough resources are available.
-        if not self.check_if_player_has_enough_resources(unit_cost):
-            return "Not Enough Resources"
+
+        
+        has_enough_resources = self.check_if_player_has_enough_resources(unit_cost)
+        if has_enough_resources != True:
+            return has_enough_resources
     
         
         # For a unit build, the production queue row uses production_type "unit_production"
@@ -393,7 +395,7 @@ class PlayerAPI:
         for resource, cost in building_cost.items():
             building_cost[resource] = cost * (upgrade_multiplier ** (current_level))# + is_currently_upgrading + in_queue))
         
-        has_enough_resources = self.check_if_player_has_enough_resources(building_cost)
+        has_enough_resources = self.check_if_player_has_enough_resources(unit_cost)
         if has_enough_resources != True:
             return has_enough_resources
         
@@ -437,8 +439,9 @@ class PlayerAPI:
         for resource, cost in unit_cost.items():
             unit_cost[resource] = cost * (upgrade_multiplier ** unit_level)
         
-        if not self.check_if_player_has_enough_resources(unit_cost):
-            return "Not Enough Resources"
+        has_enough_resources = self.check_if_player_has_enough_resources(unit_cost)
+        if has_enough_resources != True:
+            return has_enough_resources
         
         # Deduct the cost.
         cur = self.db.cursor()
@@ -627,10 +630,9 @@ class PlayerAPI:
             return "Max number of trades reached for Market level"
 
         # Check if the player has enough resources.
-        if not self.check_if_player_has_enough_resources(resources_cost):
-            msg = "player does not have enough resources: " + str(resources_cost)
-            print(msg)
-            return msg
+        has_enough_resources = self.check_if_player_has_enough_resources(resources_cost)
+        if has_enough_resources != True:
+            return has_enough_resources
 
         # Lock (subtract) the cost resources from the player.
         for resource, cost in resources_cost.items():
@@ -1078,8 +1080,8 @@ class GameAPI:
         
         # Smithy always affects unit production – get its level and compute boost.
         smithy_level = building_levels.get("Smithy", 0)
-        smithy_boost = 1.2 ** smithy_level
         unit_upgrade_multiplier = game_config["game_speed_and_multiplier"]["unit_upgrade_boost_multiplier"]
+        smithy_boost = unit_upgrade_multiplier ** smithy_level
         global_speed = game_config["game_speed_and_multiplier"]["global_speed"]
         
         expected_timestamps = []
@@ -1261,7 +1263,7 @@ class GameAPI:
 
             hours_to_build = game_config["Buildings"][bld_type]["hours_to_build"]
             workers = item["number_of_workers"]
-            upgrade_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_cost_multiplier"]
+            upgrade_multiplier = game_config["game_speed_and_multiplier"]["building_upgrade_boost_multiplier"]
             gs = game_config["game_speed_and_multiplier"]["global_speed"]
             bs = game_config["game_speed_and_multiplier"]["building_speed"]
 
@@ -1669,7 +1671,7 @@ class GameAPI:
         return resources_ts + units_ts + building_ts + quests_ts
 
 
-    def create_dataframes():
+    def create_dataframes(self):
         import pandas as pd
 
         con = sqlite3.connect(DB_NAME)
