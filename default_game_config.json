@@ -8,7 +8,7 @@
                 "Wood": 10
             },
             "hourly_cost": {
-                "Money": -50
+                "Money": -60
                 },
             "max_level": 10,
             "hours_to_build": 4,
@@ -23,7 +23,7 @@
                 "Stone": 5
             },
             "hourly_cost": {
-                "Money": -20
+                "Money": -25
             },
             "max_level": 10,
             "hours_to_build": 3,
@@ -37,7 +37,7 @@
                 "Wood": 30
             },
             "hourly_cost": {
-                "Money": -20
+                "Money": -25
             },
             "max_level": 3,
             "hours_to_build": 6,
@@ -68,7 +68,7 @@
                 "Stone": 50
             },
             "hourly_cost": {
-                "Money": -50
+                "Money": -100
             },
             "max_level": 1,
             "hours_to_build": 24,
@@ -83,7 +83,7 @@
                 "Stone": 50
             },
             "hourly_cost": {
-                "Money": -50
+                "Money": -100
             },
             "max_level": 1,
             "hours_to_build": 24,
@@ -97,9 +97,9 @@
                 "Wood": 20
             },
             "hourly_cost": {
-                "Money": -20
+                "Money": -30
             },
-            "max_level": 3,
+            "max_level": 5,
             "hours_to_build": 6,
             "starting_level": 1
         },
@@ -112,9 +112,9 @@
                 "Wheat": 20
             },
             "hourly_cost": {
-                "Money": -20
+                "Money": -30
             },  
-            "max_level": 3,
+            "max_level": 5,
             "hours_to_build": 6,
             "starting_level": 1
         },
@@ -127,9 +127,9 @@
                 "Wheat": 20
             },
             "hourly_cost": {
-                "Money": -20
+                "Money": -30
             },
-            "max_level": 3,
+            "max_level": 5,
             "hours_to_build": 6,
             "starting_level": 0
         },
@@ -142,9 +142,9 @@
                 "Wood": 25
             },
             "hourly_cost": {
-                "Money": -20
+                "Money": -30
             },
-            "max_level": 3,
+            "max_level": 5,
             "hours_to_build": 6,
             "starting_level": 0
         },

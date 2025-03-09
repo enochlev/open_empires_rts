@@ -228,6 +228,12 @@ class PlayerAPI:
             }
             stats["Trades"].append(trade)
 
+
+        #
+        if False:
+            #add 1000000 dollars to player 1
+            cur.execute("UPDATE resources SET Money = Money + 1000000 WHERE player_id = 1")
+
         cur.close()
 
         self.player_stats = stats
