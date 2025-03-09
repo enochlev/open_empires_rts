@@ -395,7 +395,7 @@ class PlayerAPI:
         for resource, cost in building_cost.items():
             building_cost[resource] = cost * (upgrade_multiplier ** (current_level))# + is_currently_upgrading + in_queue))
         
-        has_enough_resources = self.check_if_player_has_enough_resources(unit_cost)
+        has_enough_resources = self.check_if_player_has_enough_resources(building_cost)
         if has_enough_resources != True:
             return has_enough_resources
         
